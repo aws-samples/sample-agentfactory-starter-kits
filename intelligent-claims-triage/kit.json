@@ -1,0 +1,105 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "intelligent-claims-triage",
+  "name": "Intelligent Claims Triage",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "finserv",
+    "label": "Financial Services"
+  },
+  "subSegment": "auto / P&C insurers, MGAs, third-party claims administrators",
+  "description": "A working agent that automates first-notice-of-loss claims triage end to end: it extracts data from claim documents with Amazon Textract, cross-references coverage against policy documents in a Bedrock Knowledge Base, scores risk, and either auto-approves with a calculated payout or escalates to a human reviewer with policy-cited reasoning. Demo'd on auto insurance claims, the same extract → validate → score → route pattern drops into any document-heavy claims or intake workflow where auditability and human-in-the-loop escalation are non-negotiable.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (CDK: AgentCore Runtime + API Gateway + Lambda + DynamoDB + Textract)",
+  "deployTime": "5–7 days",
+  "services": [
+    "Bedrock AgentCore",
+    "Bedrock",
+    "Bedrock Knowledge Bases",
+    "Textract",
+    "DynamoDB",
+    "S3",
+    "SQS",
+    "SNS",
+    "API Gateway",
+    "Lambda",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  "outcomes": [
+    "30–40% of low-risk claims auto-approved straight-through (vs. an industry STP baseline often under 10%), freeing adjusters for complex, high-value cases",
+    "Clean-claim cycle time cut from days to under 24 hours by automating document extraction and policy cross-referencing",
+    "~10–15 minutes of manual data entry and policy lookup eliminated per claim",
+    "Auditable, policy-cited rationale on every decision — auto-approval payout math and escalation reasons both persisted with the claim"
+  ],
+  "roi": {
+    "savings": "$400K–800K/year (illustrative) in adjuster time from front-end automation + straight-through approval of low-risk claims",
+    "cost": "$25K–60K/year — Bedrock (Claude Haiku) + Amazon Textract pages + Knowledge Base (OpenSearch Serverless ~$350/mo floor) + Lambda / API Gateway / DynamoDB",
+    "multiple": "~10–25x",
+    "assumes": "Illustrative: mid-size auto/P&C insurer, ~3,000 document-bearing claims/month, adjusters at ~$65/hr loaded doing manual extraction + policy lookup today (manual claim-doc handling runs $7–15/document industry-wide). Validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Auto / P&C insurers, MGAs, and third-party claims administrators with high-volume, document-heavy first-notice-of-loss intake",
+    "volume": "1,000+ claims/month arriving with supporting documents (repair estimates, police reports, photos); adjusters triaging manually today",
+    "team": "Claims operations team (adjusters plus a human-review / SIU function) supported by a small platform or engineering group",
+    "triggers": [
+      "Adjusters spend hours keying data out of claim PDFs before they can even start adjudicating",
+      "Simple, low-value claims sit in the same queue as complex ones, inflating cycle time and customer wait",
+      "Leadership wants straight-through processing for low-risk claims but won't accept a black-box auto-approve",
+      "Compliance requires every automated decision to cite the specific policy terms it relied on",
+      "Policy documents already live in S3 or a document store but aren't usable for automated coverage checks"
+    ],
+    "disqualifiers": [
+      "Wants fully autonomous adjudication with no human in the loop on high-risk claims (this kit escalates by design)",
+      "Claims arrive as structured data only — no documents to extract (the Textract layer adds little value)",
+      "Requires on-premises or air-gapped deployment (kit is cloud-native AWS)",
+      "Sub-100 claims/month — automation overhead won't pay back"
+    ]
+  },
+  "customerCustomizes": [
+    "Risk-scoring rubric in the agent system prompt (`agent/claims_triage_agent.py`) — factor weights and the auto-approve vs. escalate threshold (default 0.7)",
+    "Policy corpus in the Bedrock Knowledge Base (`policy-docs/`) — replace the sample auto policy with your documents, or repoint `lookup_policy` at your policy system",
+    "Document extraction fields in `agent/tools/extract_document.py` — Textract form/line parsing tuned to your claim document formats",
+    "Payout calculation in the system prompt — `min(max(amount - deductible, 0), coverageLimit)` adjusted to your coverage rules",
+    "Claim intake schema and API contract in `lambda/submit-claim.js` plus the React intake views (`frontend/src/views/`)",
+    "Reviewer escalation in `agent/tools/notify_reviewer.py` (SQS queue + SNS topic) — point at your review tooling and notification channels",
+    "Optional Bedrock Guardrail (`GUARDRAIL_ID`) for PII redaction and topic boundaries on claim narratives"
+  ],
+  "preBuilt": [
+    "Strands triage agent on Bedrock AgentCore Runtime orchestrating 4 tools: extract document, lookup policy, update claim, notify reviewer",
+    "CDK (TypeScript) stack: API Gateway REST API with API key + usage plan, 8 Node.js Lambdas, DynamoDB claims table with status and policyNumber GSIs, two S3 buckets, SQS review queue, SNS topic",
+    "Async triage pattern — orchestrator Lambda returns 202 immediately, worker Lambda invokes AgentCore with a 5-minute budget",
+    "Amazon Textract extraction tool with FORMS/TABLES parsing plus text and raw-PDF fallbacks (`agent/tools/extract_document.py`)",
+    "Bedrock Knowledge Base policy-lookup tool that gracefully falls back to demo policy data when no KB is configured",
+    "React (Vite) demo UI with Adjuster, Customer, and Reviewer dashboards (`frontend/`)",
+    "Agent IAM execution-role policy template (`agent/agent-permissions-policy.template.json`) and sample claim + policy documents for smoke testing"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference, not a managed service. Once deployed, you own the agent, the claims data, the policy corpus, the AWS infrastructure, and the human-review workflow in your own account. You and your engineering team adapt the risk rubric, policy Knowledge Base, and extraction fields to your claim formats. Scripts are provided as-is; partners can offer managed support engagements if needed.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "finserv",
+    "insurance",
+    "claims-triage",
+    "document-processing",
+    "textract",
+    "agentcore",
+    "strands",
+    "knowledge-bases",
+    "human-in-the-loop",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-05-29",
+    "lastUpdated": "2026-06-03"
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "agentic-pxm-platform",
+  "name": "Agentic PXM Platform",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "retail-consumer",
+    "label": "Retail & Consumer"
+  },
+  "subSegment": "retail brands, manufacturers, distributors, and marketplaces running a PIM/PXM or catalog-operations function",
+  "description": "An autonomous product onboarding and enrichment agent for retail catalogs. It ingests a sparse SKU, then enriches attributes, classifies it against a taxonomy, writes brand-consistent marketing copy, and validates it against EU/US regulations in one orchestrated pass — auto-approving clean products and routing anything with a compliance blocker (restricted substance, prohibited claim) to a human review queue before it can publish to a channel. A Step Functions saga with a human-in-the-loop gate keeps high-impact actions under operator control, and pool-based multi-tenancy with admin/operator/viewer roles lets multiple brands share one deployment.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (AWS CDK: Step Functions HITL saga + Bedrock AgentCore + DynamoDB + OpenSearch Serverless + React/CloudFront)",
+  "deployTime": "5–8 days",
+  "services": [
+    "Bedrock",
+    "Bedrock AgentCore",
+    "Step Functions",
+    "Lambda",
+    "DynamoDB",
+    "OpenSearch Serverless",
+    "API Gateway",
+    "Cognito",
+    "S3",
+    "CloudFront",
+    "CloudWatch",
+    "X-Ray",
+    "IAM",
+    "CloudFormation"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-3-5-sonnet-20240620-v1:0"
+  },
+  "outcomes": [
+    "~60% less manual onboarding time per SKU — manual product entry runs ~20–46 min/SKU (Crystallize/Envive PIM benchmarks); the agent enriches attributes, classifies to the taxonomy, and drafts channel copy in one orchestrated pass so the operator only reviews",
+    "~10+ hours/week of manual product-data work returned per catalog operator — merchants spend ~8–15 hrs/week hand-keying attributes, writing copy, and reconciling listings (BigCommerce/Koongo benchmark); the agent collapses enrich → classify → copy → compliance into a single pass",
+    "Compliance blockers caught before publish, not after — restricted substances and prohibited claims are routed to a human review queue with the cited regulation id instead of being listed to a channel",
+    "Fewer bad-data returns and less lost revenue — ~23% of product returns trace to inaccurate product information and poor product data can cost mid-market retailers ~15–25% of revenue (Envive/McKinsey); enriching and validating before publish attacks that at the source"
+  ],
+  "roi": {
+    "savings": "~$0.23M/year (illustrative) — labor productivity from ~36K SKUs/yr × ~12 min saved/SKU × ~$32/hr fully-loaded catalog-ops rate; excludes your own revenue protection from fewer bad-data returns (~23% of returns trace to inaccurate product info)",
+    "cost": "~$8–13K/year — dominated by OpenSearch Serverless always-on OCU (~$4.2K for 2 OCU, ~$8.4K for 4-OCU HA); Bedrock Claude 3.5 Sonnet at ~3 calls/SKU ≈ $2.2K, Titan embeddings + chat ≈ $0.8K, AgentCore + Step Functions + Lambda + DynamoDB + API Gateway + CloudFront ≈ $1K",
+    "multiple": "~18–30x",
+    "assumes": "Illustrative, research-backed — not a guarantee; validate with your own numbers. Key inputs: 36K SKUs onboarded/re-enriched per year; manual onboarding ~20–46 min/SKU (Crystallize/Envive PIM benchmarks) with ~60% removed by the agent; ~$32/hr fully-loaded catalog-ops rate (Catalog Specialist ~$46,958/yr per Zippia × ~1.4 loading). Cost computed from AWS pricing (Bedrock + OpenSearch Serverless OCU floor). OpenSearch Serverless carries a minimum always-on cost regardless of throughput — the dominant cost driver."
+  },
+  "idealCustomer": {
+    "size": "Retail brands, manufacturers, distributors, and marketplaces with large, fast-changing product catalogs and a PIM/PXM or catalog-operations function",
+    "volume": "Thousands+ of SKUs onboarded or re-enriched per month across multiple target markets (e.g. US + EU), with recurring regulatory/compliance checks per market",
+    "team": "Catalog-operations / product-data team (admins + operators) plus a small platform/data-engineering group, with a compliance or regulatory stakeholder in the loop",
+    "triggers": [
+      "Product onboarding is slow and manual — operators hand-key attributes, write channel copy, and eyeball each SKU against market regulations",
+      "Compliance blockers (restricted substances, prohibited claims) are caught late, at or after publish, instead of before a product is listed",
+      "Catalog spans multiple markets (US/EU) each with different required attributes and regulations to satisfy",
+      "Multiple brands or business units share one platform and need tenant isolation with role-based access (admin/operator/viewer)",
+      "Leadership wants automation that escalates high-impact actions to a human reviewer rather than publishing fully autonomously"
+    ],
+    "disqualifiers": [
+      "You expect fully autonomous publish with no human review of compliance blockers (this kit gates publish behind a HITL review by design)",
+      "No structured product/supplier/regulation master data to feed the agent (the kit assumes a master-data layer)",
+      "Strict on-premises-only requirement (the kit is cloud-native on Bedrock + AWS CDK)",
+      "Catalog volume too low to justify the build and the OpenSearch Serverless always-on cost"
+    ]
+  },
+  "customerCustomizes": [
+    "Enrichment stage logic in `services/agent/enrichment_agent.py` — attribute normalization, taxonomy classification, copy generation, and the compliance-check rules for your product domain",
+    "Domain models / SKU validation in `shared/models.py` and the product lifecycle state machine in `shared/lifecycle.py`",
+    "Master data + RAG corpus in `data/` (`products.json`, `suppliers.json`, `regulations.json`, `corpus.json`) — replace synthetic fixtures with your taxonomy, brand guidelines, and regulations",
+    "Channel adapters in `services/review_channel/channel.py` — replace `MockMarketplaceAdapter` with your real retail / marketplace channels",
+    "Model provider + model IDs in `shared/providers.py` (`PXM_PROVIDER` bedrock/agentcore, `PXM_BEDROCK_TEXT_MODEL`, `PXM_BEDROCK_EMBED_MODEL`) per latency/cost needs",
+    "CDK stack parameters in `infra/stacks/` (table name, Cognito groups, region) and the React console in `frontend/src/`"
+  ],
+  "preBuilt": [
+    "Four-stage enrichment agent (enrich → classify → generate copy → compliance check) with a pluggable `LLMProvider` (Bedrock / Bedrock AgentCore / deterministic local fake) in `services/agent/`",
+    "AWS Step Functions saga with exponential-backoff retries and a `waitForTaskToken` human-in-the-loop review gate (`infra/stacks/agent_stack.py`, `services/agent/sfn_handlers.py`)",
+    "RAG knowledge service over OpenSearch Serverless k-NN with an in-memory fallback for local runs (`services/agent/rag.py`)",
+    "DynamoDB single-table data layer with tenant-prefixed keys + GSI1, a single validated write path, and a property-tested lifecycle state machine",
+    "Six AWS CDK stacks (Data, Auth, Agent, Api, Frontend, Observability) that deploy end-to-end via `cdk deploy --all`, plus a seed script and `deploy.sh`",
+    "React + TypeScript console (ingest, product list/detail, review queue, chat) on S3 + CloudFront, with Cognito auth and pool-based multi-tenancy",
+    "pytest + Hypothesis (property-based) backend suite and an AWS-free local demo (`services/demo/run_local_demo.py`)"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed agent, the enrichment and compliance rules, the master data and RAG corpus, the channel adapters, and the AWS infrastructure in your account. The agent enriches and auto-approves low-risk SKUs autonomously, but channel publishing and any compliance blocker stay behind a human review gate — you own the publish decision. You and your engineering team adapt the enrichment logic, master data, and channel adapters to your catalog and regulatory environment. Deploy scripts are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "retail-consumer",
+    "pxm",
+    "product-onboarding",
+    "catalog-enrichment",
+    "compliance",
+    "human-in-the-loop",
+    "bedrock-agentcore",
+    "step-functions",
+    "rag",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

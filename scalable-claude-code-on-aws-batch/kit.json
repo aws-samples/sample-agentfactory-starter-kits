@@ -1,0 +1,102 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "scalable-claude-code-on-aws-batch",
+  "name": "Scalable Claude Code on AWS Batch",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "software",
+    "label": "Software & Internet"
+  },
+  "subSegment": "platform-engineering and developer-experience teams running large-scale code migrations, reviews, and refactors across many repositories",
+  "description": "A platform for fanning out hundreds of parallel Claude Code coding-agent jobs on AWS Batch against Amazon Bedrock — with no Anthropic API keys, using IAM roles only. Each job clones a repo, runs Claude Code headlessly against a prompt with a hard per-job dollar budget, then uploads the result JSON and a git patch to S3. The same pattern drives bulk code migrations, automated PR review, mass refactors, and parallel data analysis across a whole fleet of repositories.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (AWS Batch + Fargate/EC2 Spot + Bedrock + CDK)",
+  "deployTime": "3–5 days",
+  "services": [
+    "Batch",
+    "Bedrock",
+    "Fargate",
+    "EC2",
+    "ECR",
+    "ECS",
+    "S3",
+    "IAM",
+    "Secrets Manager",
+    "CloudWatch",
+    "SNS",
+    "VPC"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-sonnet-4-6"
+  },
+  "outcomes": [
+    "~3,000+ senior-engineer hours/year reclaimed on recurring cross-repo upgrades (illustrative: a 1,000-repo estate at ~2.5 framework/LTS upgrades per repo per year — JPMorgan Chase's published Spring Boot cadence — run as parallel Batch jobs instead of by hand)",
+    "Hundreds to thousands of repos processed per run — fan out Claude Code jobs across a whole fleet with no servers to manage and no API keys to distribute (benchmark: JPMC applies OpenRewrite-style upgrades across 40,000+ Spring Boot apps)",
+    "40–60% faster turnaround on cross-cutting changes vs. manual work, before parallelism — vendor-reported AI refactoring cuts multi-file operations from ~40 hours to 16–32 hours; Batch fan-out compounds that into overnight campaigns",
+    "Predictable spend: a hard `--max-budget-usd` ceiling per job (~$4 of Bedrock per migration job in the illustrative model — Sonnet at $3/$15 per 1M tokens) plus Fargate Spot (up to ~70% compute savings) keep an illustrative 2,500-job year to ~$10–12K all-in"
+  ],
+  "roi": {
+    "savings": "~$265K/year (illustrative; range ~$260K–$310K)",
+    "cost": "~$12K/year AWS (Bedrock ~$10K — the dominant variable cost — plus ~$2K Fargate Spot compute + fixed VPC endpoints/NAT/S3/CloudWatch; no OpenSearch in this kit)",
+    "multiple": "~15–25x",
+    "assumes": "Research-backed illustrative — validate with your own numbers. Assumes a 1,000-repo estate × ~2.5 upgrades/repo/yr = ~2,500 jobs/yr (JPMorgan Chase / Moderne published Spring Boot cadence); ~2 engineer-hrs/task manual vs. ~0.6 hr human review (internal estimate); $80/hr fully-loaded engineer cost (BLS median $133,080, May 2024, ÷2,080hrs ×~1.25 loading); ~$4 Bedrock+compute per job (Claude Sonnet $3/$15 per 1M tokens, ~0.8M in / 0.08M out per job, Fargate Spot). Bedrock token-per-job is the dominant cost lever — validate against a pilot before committing."
+  },
+  "idealCustomer": {
+    "size": "Software orgs and platform-engineering teams with many repositories (or a large monorepo) and recurring cross-cutting code work",
+    "volume": "Tens to thousands of repos or modules that need the same change; recurring migration / review / refactor campaigns rather than one-off edits",
+    "team": "A central platform, DevEx, or tooling team (2–15 engineers) that owns automation on behalf of many product teams",
+    "triggers": [
+      "Facing a large cross-repo migration (language/framework version bump, deprecated-library removal, API change) that is too big to do by hand",
+      "Wants to run Claude Code at scale on AWS without distributing Anthropic API keys — Bedrock with IAM roles is the mandated model gateway",
+      "Needs automated code review or security sweeps across many repositories with controlled, budget-capped spend",
+      "Already runs containerized batch/CI workloads on AWS and is comfortable owning CDK-deployed infrastructure",
+      "Engineering leadership wants a repeatable, auditable way to apply a fleet-wide code change with cost guardrails"
+    ],
+    "disqualifiers": [
+      "Wants a hosted SaaS or managed control plane — this is self-hosted infrastructure deployed into your own account",
+      "Only needs a single interactive coding-agent session (the Batch fan-out and queueing are overkill for one developer at a keyboard)",
+      "Cannot enable Bedrock model access in your account/region, or won't run CDK / own the infrastructure",
+      "Requires fully on-prem or air-gapped execution with no AWS footprint"
+    ]
+  },
+  "customerCustomizes": [
+    "Job manifests in `examples/*/manifest.json` — the repos, prompts, per-job budgets, compute type, and allowed tools for your own migration/review/refactor campaigns",
+    "Container execution logic in `docker/entrypoint.sh` and the image in `docker/Dockerfile` — add language toolchains, build tools, or post-processing steps a job needs",
+    "Bedrock IAM scope and the model allow-list in `infra/lib/batch-stack.ts` (Sonnet + Haiku by default; add Opus ARNs if required)",
+    "Scale and cost levers via CDK context in `infra/bin/app.ts` — `maxvCpus` (default 256), `useSpot` (default true), and `region`",
+    "Bedrock Guardrail content and PII policies in `infra/lib/batch-stack.ts` (`ClaudeCodeGuardrail`) to match your content and data-handling rules",
+    "CLI defaults in `cli/src/claude_batch/config.py` — default model, per-job budget, and allowed-tools set applied when not overridden"
+  ],
+  "preBuilt": [
+    "Four-stack AWS CDK app (`infra/lib/`): NetworkStack (VPC, 2 AZs, NAT, VPC interface endpoints for Bedrock/ECR/Logs + S3 gateway endpoint), StorageStack (ECR repo + encrypted S3 results bucket with 90-day lifecycle), BatchStack, and MonitoringStack",
+    "AWS Batch with two compute environments — Fargate Spot (4 vCPU / 8 GB, 2-hr timeout) and EC2 Spot (8 vCPU / 32 GB, 4-hr timeout) — plus separate job queues and retry strategies",
+    "Claude Code container (`docker/`, node:22-slim, non-root, isolated per-job `CLAUDE_CONFIG_DIR`) wired to Bedrock with no API keys — IAM job role only — that clones a repo, runs `claude --bare -p` headlessly, and uploads result JSON + git patch + metadata to S3",
+    "`claude-batch` Python CLI (submit / status / results / cancel / configure) with single-job and manifest-based bulk submission, rate limiting, and watch mode",
+    "Bedrock Guardrail (content + PII filtering) and least-privilege IAM: Bedrock invoke scoped to Claude Sonnet/Haiku model + inference-profile ARNs, S3 scoped to the results bucket, CloudWatch Logs scoped to the job log group, git token via Secrets Manager, HTTPS-only egress security group",
+    "CloudWatch dashboard + alarms (job outcomes, Bedrock throttling) with SNS alerting, and four worked examples (code-migration, code-review, mass-refactor, data-analysis) each with a runnable manifest"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed AWS infrastructure, the job manifests and prompts, the source repositories the jobs clone, the results in S3, and the Bedrock spend in your account. You and your engineering team adapt the manifests, the container, the IAM/Guardrail scope, and the scale parameters to your workloads. Claude Code's output (code changes, patches, reports) is for human review and merge — you own what lands in your repositories. CDK stacks and scripts are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "software",
+    "batch",
+    "claude-code",
+    "coding-agents",
+    "bedrock",
+    "devex",
+    "code-migration",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

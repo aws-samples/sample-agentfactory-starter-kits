@@ -1,0 +1,98 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "xml-schema-inference-agent",
+  "name": "XML Schema Inference Agent",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "cross-vertical",
+    "label": "Cross-vertical"
+  },
+  "subSegment": "Credit-decisioning & risk platforms (originally built for a fintech risk-decisioning SaaS); applies to any data/platform team onboarding heterogeneous XML/JSON from many sources with no shared schema",
+  "description": "A Bedrock Agent that turns raw, undocumented XML/JSON traces into a usable data contract in one pass — instead of days of hand-written XPath. Three Lambda tools let the agent discover every field and its path, infer types from string values, detect repeating elements as arrays, map your own paths to standard logical field names (credit_score, income, dti, fraud_score, decision…) with confidence scores, and emit working Redshift SUPER/PartiQL queries. The same agent works across completely different source schemas with no per-source code, so onboarding a new data source drops from days of manual mapping to minutes.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (CDK: Bedrock Agent + Lambda Action Group + S3 → Redshift SUPER)",
+  "deployTime": "3–5 days",
+  "services": [
+    "Bedrock",
+    "Bedrock Agents",
+    "Lambda",
+    "S3",
+    "Redshift",
+    "Kinesis",
+    "IAM",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-sonnet-4-20250514-v1:0"
+  },
+  "outcomes": [
+    "75–80% reduction in new-source onboarding time by auto-discovering schema, types, and field mappings instead of hand-writing per-source XPath. Basis: AWS's Rhapsody case study — an Amazon Bedrock data-integration agent that cut build-and-test effort ~80% and connectivity setup from 16h→4h; the originating team's baseline was 2–3 engineer-days/source → minutes",
+    "~25–30 hours/week of data-engineering time freed by replacing a pile of per-source Spark/XPath ETL jobs with one agent that adapts to any XML/JSON structure (illustrative: ~190 engineer-days/yr from 100 sources × 2.5 days × 75%, valued at a ~$635 fully-loaded day rate derived from BLS data-scientist median pay)",
+    "Majority of standard business fields auto-mapped per source with confidence scores, with ambiguous and unmapped fields flagged for human review rather than silently dropped (auto-map hit rate is an internal estimate — validate on your own traces)",
+    "Schema-change response drops from hours of editing brittle Spark jobs to re-running the agent on new traces and diffing the mapping"
+  ],
+  "roi": {
+    "savings": "~$155K/yr illustrative (range ~$150K–$285K by volume and day rate): data-engineer-days saved on new-source onboarding plus schema-change re-mapping. Research-backed illustrative — not a guarantee; validate with your own numbers.",
+    "cost": "~$600–$1,200/yr: ~250 agent runs/yr (Claude Sonnet 4 at $3/1M in, $15/1M out ≈ $0.70/run) + Lambda/S3/CloudWatch (low), plus an optional Redshift Serverless validation layer; near-$0 incremental if landing into an existing Redshift cluster. This is a run-at-onboarding tool, not a per-transaction agent, so spend is low and bursty.",
+    "multiple": "~100x+",
+    "assumes": "100 new sources/yr × 2.5 engineer-days each (baseline reported by the originating team) × 75% reduction, + 150 schema-change re-mappings/yr × 0.5 day × 75%; onboarding-time reduction basis: AWS Rhapsody Amazon Bedrock data-integration case study (build-and-test ~80%, connectivity 16h→4h). Day rate ~$635 loaded = BLS data-scientist median $112,590 (May 2024) × 1.3 benefits/overhead ÷ 230 working days. AWS cost from Bedrock + Lambda + S3 (+ optional Redshift Serverless) pricing. Research-backed illustrative; validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Platforms or data teams that ingest semi-structured XML/JSON from many external sources with no shared schema — e.g. a risk-decisioning SaaS serving hundreds of downstream lenders/fintechs",
+    "volume": "Tens to hundreds of distinct source schemas to onboard, each without an XSD or documentation, plus recurring schema drift on existing sources",
+    "team": "A data-engineering or platform team (2–15) currently hand-writing per-source parsers / XPath mappings or maintaining many Spark ETL jobs",
+    "triggers": [
+      "Onboarding a new data source or customer takes days of manual schema mapping with no XSD or documentation to work from",
+      "Each source defines its own XML/JSON shape and the team maintains a growing pile of per-source Spark or XPath extraction jobs",
+      "Schema changes on existing sources silently break pipelines and force manual re-mapping",
+      "Earlier POCs with Snowflake, Databricks, or Iceberg+Glue+Athena stalled on nested / repeating-element parsing",
+      "The team wants heterogeneous traces landed in Redshift SUPER and queried with consistent logical field names across sources"
+    ],
+    "disqualifiers": [
+      "Sources already share a well-defined, stable schema or XSD — there is nothing to infer",
+      "You want fully autonomous mapping straight into production tables with no human review (this proposes mappings with confidence scores; an engineer approves)",
+      "Strict on-premises-only requirement (the kit is cloud-native on Bedrock + Lambda + S3)",
+      "Source count and volume too low to pay back the build (a handful of stable sources)"
+    ]
+  },
+  "customerCustomizes": [
+    "Standard logical-field dictionary `STANDARD_FIELDS` in `src/lambda/schema_agent.py` — the target business fields and the keyword/context/path patterns used to match them",
+    "Path-based match patterns `PATH_PATTERNS` in `generate_mapping` (`src/lambda/schema_agent.py`) for nested fields name-matching alone can't resolve",
+    "Agent system prompt and standard-field catalog + type-inference rules in `hackathon/agent_prompt.md`",
+    "XML→JSON parsing conventions in `lambda/xml_parser.py` — the `ArrayElementObject`/`ArrayElementString` array handling, repeating-element detection, and `infer_type` rules for the source's data idioms",
+    "SQL generation in `generate_sql` (`src/lambda/schema_agent.py`) — Redshift table name, view-naming convention, and PartiQL path construction for your target table",
+    "Action-group OpenAPI schema (`src/lambda/api_schema.json`) and CDK resource names / region in `src/cdk/stack.py` and `src/cdk/app.py`"
+  ],
+  "preBuilt": [
+    "Bedrock Agent system prompt (data schema analyst) with the standard-field catalog and string-to-type inference rules (`hackathon/agent_prompt.md`)",
+    "Lambda action group implementing three tools — `analyze_traces`, `generate_mapping`, `generate_sql` — with confidence scoring and unmapped/ambiguous-field reporting (`src/lambda/schema_agent.py`)",
+    "OpenAPI action-group schema wiring the three tools to the agent (`src/lambda/api_schema.json`)",
+    "XML→JSON trace parser Lambda handling deeply nested XML, repeating elements, the platform's array conventions, and both S3 and Kinesis triggers (`lambda/xml_parser.py`)",
+    "CDK stack provisioning the S3 traces bucket, the tools Lambda, IAM roles, and the scoped Bedrock invoke permission (`src/cdk/stack.py`, `src/cdk/app.py`)",
+    "Streamlit demo UI with a no-AWS Local mode and a Bedrock Agent mode that streams the agent's reasoning trace (`src/ui/app.py`), plus cross-customer sample traces and a local test harness (`sample_data/`, `hackathon/`, `src/lambda/test_local.py`)"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed agent and Lambda tools, the standard-field dictionary and mapping rules, the trace data, and the AWS infrastructure in your account. The agent proposes field mappings with confidence scores and generates SQL — a data engineer reviews and approves before anything is promoted to production tables. You and your engineering team adapt the field dictionary, parsing conventions, and SQL target to your sources. Deploy scripts and CDK are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "cross-vertical",
+    "data-engineering",
+    "schema-inference",
+    "field-mapping",
+    "xml",
+    "etl",
+    "redshift",
+    "bedrock-agents"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

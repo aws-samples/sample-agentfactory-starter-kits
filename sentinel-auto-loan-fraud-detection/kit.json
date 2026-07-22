@@ -1,0 +1,100 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "sentinel-auto-loan-fraud-detection",
+  "name": "Sentinel Auto-Loan Fraud Detection",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "finserv",
+    "label": "Financial Services"
+  },
+  "subSegment": "auto lenders, dealer-finance platforms, captive finance arms",
+  "description": "A multi-agent fraud screening agent for auto-loan and dealer-finance applications. Four cooperating Bedrock (Claude) agents — Identity, Velocity, Financial, and an Orchestrator — each analyze one fraud dimension and feed a shared context, producing an explainable APPROVE / FLAG FOR REVIEW / DECLINE recommendation with a plain-language narrative an underwriter can act on. A deterministic heuristic engine backs every agent, so the system degrades gracefully and stays auditable. The same pattern applies to any high-volume application-fraud workflow where signals must be correlated across identity, velocity, and financial dimensions.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (Multi-Agent FastAPI + React on App Runner + Bedrock)",
+  "deployTime": "5–8 days",
+  "services": [
+    "Bedrock",
+    "App Runner",
+    "ECR",
+    "CodeBuild",
+    "S3",
+    "IAM",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  "outcomes": [
+    "~30% reduction in fraud-review time per application by replacing rigid rules triage with correlated multi-agent reasoning (AI fraud-assist cut investigation time 35–40% / ~11–13 min per case at FNBO per Pindrop; ~82% of manually reviewed cases are false positives per CyberSource/NoFraud — conservative 30% basis)",
+    "~5–8 hours/week saved per underwriter who today manually chases synthetic-identity and application-stacking signals across systems (illustrative 25K-app/mo lender: 12% manual-review rate, ~20 min/review, 30% cut; ~$180K/yr labor at a fully-loaded $50/hr from BLS loan-officer median $74,180)",
+    "Catches fraud patterns single-rule systems miss — synthetic identities (SSN issued after birth year), application stacking across dealers, income-occupation mismatches — by correlating identity, velocity, and financial signals in one pass (first-party fraud is 69% of the auto industry's $9.2B fraud-loss exposure and synthetic-identity attempts grew 98% YoY, per Point Predictive 2025)",
+    "Auditable plain-language rationale for every APPROVE / FLAG / DECLINE verdict, not just a score, so credit analysts can trust and defend the decision"
+  ],
+  "roi": {
+    "savings": "~$0.55M/year (illustrative) — ~$180K underwriter time saved (BLS loan-officer wage, loaded) + ~$375K conservative fraud-loss avoidance (Point Predictive: $9.2B industry exposure, 69% first-party)",
+    "cost": "~$19K/year — Bedrock Claude Sonnet 4.5 at 4 calls/app (~$0.05/app × 300K apps ≈ $16K, worst-case all-live) + App Runner/ECR/CodeBuild/CloudWatch (~$0.8K); no OpenSearch/KB/Guardrails in this kit",
+    "multiple": "~20–30x",
+    "assumes": "Illustrative 25K-app/mo lender: 12% manual-review rate, ~20 min/review (Tookitaki/roe.ai), 30% time cut (vs Pindrop FNBO 35–40%), $50/hr fully-loaded (BLS loan-officer median $74,180 × ~1.4), fraud-avoided derived conservatively from Point Predictive's $9.2B exposure; Bedrock cost assumes all apps run live (worst case). Research-backed illustrative — validate with your own numbers; do not commit to these numbers."
+  },
+  "idealCustomer": {
+    "size": "Auto lenders, dealer-finance platforms, and captive finance arms processing meaningful application volume (e.g. RouteOne-style origination networks)",
+    "volume": "Thousands+ of auto-loan / dealer-finance applications per month; existing rules-based screening producing high false-positive noise",
+    "team": "Fraud-ops or underwriting team (3–20 analysts) supported by a small platform/data engineering group",
+    "triggers": [
+      "Rules-based fraud screening misses synthetic identities or application stacking that only show up when signals are correlated across applications",
+      "Underwriters spend significant time manually clearing flagged applications and can't explain why a rule fired",
+      "Compliance or risk leadership wants explainable, defensible fraud decisions — not a black-box score",
+      "You already run containerized workloads and wants the agent to live next to existing infra",
+      "Loan-origination volume is growing faster than the fraud-review team can scale"
+    ],
+    "disqualifiers": [
+      "You expect fully autonomous auto-decline (this is underwriter decision-support, not an auto-block system)",
+      "No structured application data to feed the agents (kit assumes identity, velocity, and financial attributes per application)",
+      "Strict on-premises-only requirement (kit is cloud-native on Bedrock + App Runner)",
+      "Volume too low for the build to pay back (a handful of applications a month)"
+    ]
+  },
+  "customerCustomizes": [
+    "Per-agent system prompts in `backend/agents/{identity,velocity,financial,orchestrator}_agent.py` — fraud signals specific to your product and risk appetite",
+    "Deterministic heuristic engine in `backend/mock_results.py` — the rule logic and score thresholds behind each agent",
+    "Weighted scoring model in the orchestrator (`0.25·identity + 0.25·velocity + 0.25·financial + 0.25·peak`) and the APPROVE/FLAG/DECLINE cutoffs",
+    "Application schema in `backend/models.py` (`LoanApplication`) to match your origination data shape",
+    "Model tier selection in `backend/bedrock_client.py` (`MODEL_CHOICES`) — Sonnet 4.5 / Haiku 4.5 / Opus 4.8 per latency-vs-accuracy needs",
+    "Frontend branding and dashboard layout in `frontend/src/components/` (React + Vite + Tailwind)"
+  ],
+  "preBuilt": [
+    "Four-agent pipeline (Identity → Velocity → Financial → Orchestrator) with shared-context threading in `backend/pipeline.py`",
+    "Bedrock client wrapper (`backend/bedrock_client.py`) with per-request mock/live toggle, model-tier selection, and token streaming via boto3 `invoke_model`",
+    "Deterministic heuristic fallback engine so the agent never hard-fails on missing creds, throttling, or malformed model output",
+    "FastAPI backend with one-shot + SSE streaming endpoints and an 'Ask the Analyst' grounded chat",
+    "React + Vite + Tailwind SPA: dashboard, assessment detail, animated agent network, score-contribution chart, risk gauge",
+    "Single-container Dockerfile (SPA + API one origin) plus App Runner deploy scripts (local-Docker and CodeBuild-in-cloud paths) and a scoped `bedrock:InvokeModel` instance-role policy",
+    "pytest + Hypothesis test suite (16 tests incl. a property test) and three tuned sample scenarios (APPROVE / FLAG / DECLINE)"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed agents, the fraud heuristics and scoring thresholds, the application data, and the AWS infrastructure in your account. You and your engineering team adapt the agent prompts, the deterministic rule engine, and the application schema to your lending product and risk policy. The recommendation is decision-support for a human underwriter — you own the funding decision. Deploy scripts are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "finserv",
+    "auto-lending",
+    "fraud",
+    "multi-agent",
+    "underwriting",
+    "explainable-ai",
+    "bedrock",
+    "claude",
+    "app-runner",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

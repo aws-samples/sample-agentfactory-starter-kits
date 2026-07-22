@@ -1,0 +1,96 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "triageai-patient-triage",
+  "name": "TriageAI Patient Triage",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "healthcare",
+    "label": "Healthcare & Life Sciences"
+  },
+  "subSegment": "hospital EDs, urgent-care networks, community health systems, telehealth intake",
+  "description": "A patient-intake and clinical-triage agent: a patient (or a nurse on your behalf) describes symptoms in a structured form, and a Bedrock (Claude) call classifies urgency (low / medium / high / critical), recommends a department (ER / Primary Care / Mental Health / Specialist Referral), surfaces red-flag warnings and clarifying follow-up questions, and routes the case into a clinical staff queue ordered by urgency. A deterministic safe-default fallback applies whenever the model is unavailable, so the queue never stalls and every routing decision stays explainable and reviewable by staff. The same pattern fits any structured-intake-then-route workflow where a human must make the final clinical call.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (FastAPI + React SPA + Bedrock Converse, deterministic fallback)",
+  "deployTime": "5–8 days",
+  "services": [
+    "Bedrock",
+    "IAM",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-3-5-haiku-20241022-v1:0"
+  },
+  "outcomes": [
+    "~2,200–2,900 triage-nurse hours/year freed at 600 intakes/day by pre-classifying urgency and drafting department routing for nurse confirmation — basis: median ED triage ~1.9 min/case (J Emerg Nurs 2025, n=382,027) × an assumed 30–40% time reduction (illustrative; validate with your own numbers)",
+    "Time-to-first-routing compressed from a queued manual triage step to seconds — an urgency + department recommendation returns on form submission, against a US ED median wait of 17–31 min (national throughput study, 2006–2016)",
+    "Consistent, explainable triage: every case carries a plain-language reasoning string, red-flag list, and follow-up questions a clinician can review — not an opaque score",
+    "More than half of US ED visits are non-urgent (NHAMCS-based studies); surfacing those for safe routing to Primary Care / Mental Health / Specialist Referral keeps critical cases at the top of the staff queue — actual diversion rate is clinically validated per deployment and treated as upside, not a committed saving"
+  ],
+  "roi": {
+    "savings": "~$170K–$225K/yr — illustrative nurse-time floor at 600 intakes/day: ~2,200–2,900 triage-nurse hours freed (median ED triage ~1.9 min/case × 30–40% reduction) at a fully-loaded RN cost of $76.80/hr. Research-backed illustrative, not a guarantee; validate with your own numbers. Throughput / ED-diversion gains are additional upside but more variable.",
+    "cost": "~$1,500–$2,000/yr — Bedrock Claude 3.5 Haiku, one Converse call per intake (~1.5K input / ~1K output tokens ≈ $0.005/intake) at ~219K intakes/yr ≈ $1.2K, plus light FastAPI+React hosting (~$300–600) and CloudWatch (~$100–300). No OpenSearch/vector-DB floor (in-memory store).",
+    "multiple": "~85–150x",
+    "assumes": "Inputs: 600 intakes/day × 365; ED triage median ~1.9 min/case (J Emerg Nurs 2025, PMID 40387689); 30–40% time reduction from AI pre-classification; fully-loaded RN compensation $76.80/hr (BLS, Dec 2024); >50% non-urgent ED share (NHAMCS-based); cost from AWS Bedrock pricing. Research-backed illustrative; validate with your own numbers — do not commit to playbook numbers."
+  },
+  "idealCustomer": {
+    "size": "Hospital EDs, urgent-care networks, community health systems, and telehealth providers running a structured patient-intake step ahead of clinical assessment",
+    "volume": "Hundreds+ of patient intakes per day where a nurse or front-desk staffer triages urgency and routes to a department by hand",
+    "team": "A clinical triage / intake team (nurses + front-desk) supported by a small platform or digital-health engineering group",
+    "triggers": [
+      "Triage nurses are a bottleneck and intake backlogs delay how fast urgent patients are surfaced",
+      "Routing to the wrong department (or over-routing to the ER) is driving avoidable cost and patient wait times",
+      "Clinical leadership wants consistent, documented triage reasoning — not nurse-by-nurse variability or a black-box score",
+      "You are building or modernizing a digital intake / telehealth front door and wants an urgency-classification step in it",
+      "Intake data exists in a form/portal but isn't yet feeding any decision-support"
+    ],
+    "disqualifiers": [
+      "You expect autonomous clinical decisions (this is staff decision-support — a human clinician always makes the final call)",
+      "No structured intake step to feed the agent (kit assumes a symptom form with age, symptoms, duration, pain level)",
+      "Hard requirement for a persistent EHR-integrated case store on day one (reference is in-memory, by design; persistence is a customization)",
+      "Strict on-premises-only requirement with no Bedrock access in any region"
+    ]
+  },
+  "customerCustomizes": [
+    "Triage prompt and JSON output contract in `backend/src/triageai/triage/prompt.py` — the clinical instructions, urgency definitions, and what the model must return",
+    "Urgency and department taxonomy in `backend/src/triageai/domain/enums.py` (ER / Primary Care / Mental Health / Specialist Referral) to match your service lines",
+    "Intake form schema in `backend/src/triageai/domain/models.py` (`TriageRequest`) and the allowed symptom-duration set, plus the matching React form in `frontend/src/pages/IntakeForm.tsx`",
+    "Safe-default fallback routing in `backend/src/triageai/triage/fallback.py` — where cases land when the model is unavailable",
+    "Model id, region, timeout, retry, and rate-limit settings in `backend/src/triageai/config.py` / `backend/.env.example` (default `anthropic.claude-3-5-haiku-20241022-v1:0`)",
+    "PHI-redaction allowlist in `backend/src/triageai/logging/config.py` and staff-queue branding/layout in `frontend/src/pages/StaffQueue.tsx`"
+  ],
+  "preBuilt": [
+    "FastAPI backend with `POST /api/triage`, staff routes (`/api/staff/login`, `/cases`, `/cases/{id}`), and `/healthz`",
+    "`BedrockTriageEngine` calling the Bedrock Converse API with a single PHI-aware user turn, schema-validated JSON output, one retry on invalid schema, and a budget timeout",
+    "Deterministic safe-default fallback (`build_fallback_result`) so the pipeline never hard-fails — failed cases route to Primary Care at medium urgency and are tagged `ai_fallback`",
+    "Staff access: passcode → signed, expiring session token (itsdangerous), constant-time compare, Bearer-token gate, plus slowapi rate limiting and a 5-header security middleware stack",
+    "PHI handling baked in: name/email excluded from the prompt by construction, allowlist-based PHI-redacting JSON logger, TLS in transit, in-memory store scrubbed on shutdown",
+    "React + Vite + TypeScript SPA: intake form with patient/nurse toggle, result view, staff login, urgency-sorted staff queue, case detail with reasoning and red flags, urgency badges",
+    "Test suite (65 backend pytest + Hypothesis, 26 frontend vitest + fast-check, 12 property-based invariants) and the full design documentation in `aidlc-docs/`"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service and not a medical device. You own the deployed application, the triage prompt and taxonomy, the intake data, and the AWS infrastructure in your account. Every triage output is decision-support for a human clinician — you own the clinical decision and are responsible for clinical validation, regulatory posture, and PHI handling in production. The reference is a local, in-memory prototype; you and your engineering team add persistence, authentication hardening, and any EHR integration. Scripts and prompts are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "healthcare",
+    "patient-triage",
+    "intake",
+    "urgency-classification",
+    "clinical-workflow",
+    "bedrock",
+    "claude",
+    "fastapi",
+    "react",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

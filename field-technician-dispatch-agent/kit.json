@@ -1,0 +1,91 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "field-technician-dispatch-agent",
+  "name": "Field Technician Dispatch Agent",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "cross-vertical",
+    "label": "Cross-vertical"
+  },
+  "subSegment": "field-service operations — HVAC/electrical/plumbing trades, telecom & network install, facilities, utilities, medical-equipment field service",
+  "description": "A work-order dispatch agent that picks the right field technician for a job and explains why. A dispatcher describes a work order in plain language; a single Strands ReAct agent calls seven tools — work-order lookup, skill/certification/proximity search, availability check, Haversine travel-time, parts-inventory check, and dispatch execution — and streams its reasoning step by step to a chat UI before assigning a technician. It applies priority-based logic (closest available qualified tech for critical jobs, best overall fit for routine ones) and the same pattern fits any operation that matches a skilled, geographically distributed workforce to incoming jobs.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom Stack (Strands Agents + FastAPI + React + Bedrock)",
+  "deployTime": "5–8 days",
+  "services": [
+    "Bedrock"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-sonnet-4-20250514-v1:0"
+  },
+  "outcomes": [
+    "~40% less dispatcher time per work order (illustrative) — manual scheduling runs ~15 hrs/week in an 8-tech operation, roughly ~5 min per order; the agent collapses the skill/cert/availability/proximity lookup into a single pass (baseline per Field Promax)",
+    "~6 hours/week saved per dispatcher — manual scheduling and coordination consume ~15 hrs/week in an 8-tech operation (Field Promax); a conservative ~40% reduction frees ~6 hrs/week to spend on exceptions and customers",
+    "Faster, more consistent response on urgent jobs and fewer wrong-tech dispatches — priority-based logic (closest available qualified tech for CRITICAL, best overall fit for MEDIUM/LOW) is applied on every order, and the hard skill/cert + parts check attacks the ~12–15% industry-average avoidable-dispatch rate (vs ~3% for top performers, per Aquant) that drives repeat truck rolls",
+    "Auditable, step-by-step reasoning streamed for every decision, so a dispatcher can see exactly why a technician was chosen — skill match, distance, availability — and override before the assignment is finalized"
+  ],
+  "roi": {
+    "savings": "~$0.46M/year (illustrative) — ~$83K/yr dispatcher time saved + ~$375K/yr avoided wrong-tech/repeat truck rolls, modeled at ~75K work orders/yr",
+    "cost": "~$11K/year — Bedrock (Claude Sonnet 4) tokens only (~$0.15/dispatch across one ~6-turn ReAct loop × ~75K dispatches); local FastAPI host adds negligible compute",
+    "multiple": "~30–55x (~8x on labor alone)",
+    "assumes": "Inputs: dispatcher loaded rate ~$33/hr (BLS/O*NET 43-5032 mean $23.50/hr × 1.4 burden); ~15 hrs/wk manual scheduling per 8-tech shop → ~5 min/order, agent cuts a conservative ~40% (Field Promax); ~12–15% avoidable-dispatch rate (Aquant) with ~$250 conservative truck-roll cost (S&C Electric); Bedrock token rates per AWS pricing. Research-backed illustrative — validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Organizations running field-service operations with a multi-skill technician workforce — trades (HVAC/electrical/plumbing), telecom & network install, facilities management, utilities, or medical-equipment field service",
+    "volume": "Dozens to thousands of work orders per day dispatched across a geographically distributed pool of technicians with differing skills, certifications, and schedules",
+    "team": "A dispatch/operations team (1–10 dispatchers) supported by a small platform or data-engineering group that can connect the agent's tools to existing systems",
+    "triggers": [
+      "Dispatchers match technicians to jobs by manually eyeballing skills, certifications, schedules, and location across separate systems",
+      "Response-time SLAs on urgent or emergency jobs slip because the right technician isn't identified fast enough",
+      "Dispatch quality depends on tribal knowledge — a few senior dispatchers who know who can do what and who's nearby",
+      "An existing field-service-management (FSM) system holds work-order and technician data but has no reasoning layer to recommend the assignment",
+      "Work-order volume is growing faster than the dispatch team can scale"
+    ],
+    "disqualifiers": [
+      "You want fully autonomous dispatch with no dispatcher in the loop (this is decision-support — a human confirms the assignment)",
+      "No structured technician data (skills, certifications, location, schedule) available to feed the tools",
+      "Strict on-premises-only requirement with no Bedrock model access in-region",
+      "The real problem is pure multi-stop route optimization, not skill/availability matching (a VRP solver fits better than an LLM agent)"
+    ]
+  },
+  "customerCustomizes": [
+    "Dispatch logic and priority rules in the agent system prompt (`backend/app/agent.py`) — the skill-match, urgency, proximity, rating, and cost trade-offs specific to your operation",
+    "The seven agent tools in `backend/app/tools.py` — repoint each from the bundled JSON files to your real systems (FSM/work-order API, HR/skills database, scheduling system, parts inventory)",
+    "Technician, work-order, and schedule data schemas (`backend/data/*.json`) to match your field-service data shape",
+    "Travel-time estimation in `calculate_travel_time` / `_haversine_miles` (`backend/app/tools.py`) — replace the straight-line Haversine + fixed 35 mph assumption with a real routing/traffic API",
+    "The `dispatch_technician` tool so it calls your real notification and work-order-assignment system instead of returning a mock confirmation",
+    "Model tier and region in `BedrockModel(...)` (`backend/app/agent.py`) and frontend branding/layout in `frontend/src/components/`"
+  ],
+  "preBuilt": [
+    "Strands Agents ReAct agent configured with a dispatch system prompt and seven registered tools (`backend/app/agent.py`)",
+    "Seven `@tool` functions: work-order lookup, pending-order list, technician search (skill/cert/proximity filter), availability check, Haversine travel-time, parts-inventory check, and dispatch execution (`backend/app/tools.py`)",
+    "FastAPI backend with an SSE streaming endpoint (`POST /api/dispatch`) that streams agent reasoning, tool calls, and the final decision, plus sync, work-order, technician, and health endpoints (`backend/app/main.py`)",
+    "React + Vite single-page UI rendering streamed reasoning, tool-call cards, a work-order side panel, and a final dispatch-summary card (`frontend/src/`)",
+    "Seed dataset — 8 technicians, 5 work orders across five trades and four urgency levels, and schedule/availability data in the DFW metro (`backend/data/`)",
+    "Priority-based decision logic (CRITICAL → speed, HIGH → balanced, MEDIUM/LOW → best fit) and no-match / tie-break edge-case handling encoded in the system prompt"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed agent, the dispatch logic in the system prompt, the integrations that connect the seven tools to your real systems, the technician and work-order data, and the AWS infrastructure in your account. The agent's output is a recommendation streamed to a human dispatcher — you own the final assignment and any SLA commitments. The reference ships with mock JSON data and no production host or auth; wiring real data sources, a runtime, and access control is customization work, not shipped. Scripts and code are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "field-service",
+    "dispatch",
+    "scheduling",
+    "agentic",
+    "strands-agents",
+    "bedrock",
+    "claude",
+    "streaming"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

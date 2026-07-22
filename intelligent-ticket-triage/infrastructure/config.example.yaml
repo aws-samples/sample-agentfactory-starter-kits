@@ -1,0 +1,17 @@
+# Intelligent Ticket Triage Agent - Configuration
+# Copy this file to config.yaml and fill in your values
+
+aws_region: us-east-1
+stack_name: intelligent-ticket-triage
+
+# Customer identifier (lowercase, alphanumeric + hyphens only)
+customer_name: acme
+
+# Ticket source: zendesk | jira | servicenow | api
+ticket_source_type: zendesk
+
+# Webhook URL for ticket source integration
+webhook_url: https://your-instance.zendesk.com/api/v2/tickets
+
+# Minimum confidence for auto-resolution (0.0 - 1.0)
+confidence_threshold: 0.9

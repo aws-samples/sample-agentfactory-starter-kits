@@ -1,0 +1,105 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "dental-front-desk-agent",
+  "name": "Dental Front-Desk Agent",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "healthcare",
+    "label": "Healthcare & Life Sciences"
+  },
+  "subSegment": "dental practices, dental support organizations (DSOs), dental practice-management / voice platform vendors",
+  "description": "An AI front-desk agent for dental practices that handles inbound patient conversations — appointment booking, reschedules and cancellations, insurance eligibility and coverage questions, and post-procedure follow-up reminders. A router agent classifies intent and delegates to Scheduling and Insurance specialist agents (Claude on Bedrock AgentCore, Strands SDK), each constrained by HIPAA-safe language rules and Bedrock Guardrails. Every interaction is traced, scored against four quality rubrics by an LLM-as-a-judge evaluation pipeline, and surfaced to practice managers in a React dashboard with latency, token, hallucination-rate, and alert views.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (AgentCore Runtime + Guardrails + Observability/Eval Pipeline + AppSync Dashboard)",
+  "deployTime": "6–9 days",
+  "services": [
+    "Bedrock AgentCore",
+    "Bedrock",
+    "Bedrock Guardrails",
+    "Lambda",
+    "DynamoDB",
+    "API Gateway",
+    "AppSync",
+    "S3",
+    "CloudFront",
+    "EventBridge",
+    "CloudWatch",
+    "IAM"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  "outcomes": [
+    "~35% of inbound calls handled end-to-end without staff (illustrative) — ~60–80% of front-desk calls are routine booking/reschedule/insurance per industry analysis (twig.so), and the agent resolves a conservative ~60% of those, freeing the desk for in-office patients",
+    "~12 hours/week of receptionist time returned per location (illustrative) — deflecting ~7,600 routine scheduling/insurance calls/yr at ~5 min each, valued at a ~$25/hr loaded receptionist rate (BLS median $17.90/hr × ~1.4)",
+    "Recaptures bookings from the ~30–38% of calls practices currently miss — ~78% of missed callers never leave a voicemail and simply call a competitor (Peerlogic/DenteMax), so after-hours and overflow demand is captured instead of lost",
+    "Every interaction scored on accuracy, HIPAA-safe language, empathy, and policy adherence — practice managers see quality and hallucination rate per practice instead of guessing"
+  ],
+  "roi": {
+    "savings": "~$110K/year per location (illustrative) — ~$16K receptionist time returned + ~$95K conservatively-recovered bookings from after-hours/missed calls; multiply by location count for DSOs/vendors",
+    "cost": "~$4K/year per location — Bedrock Sonnet 4.5 router+specialist turns (~$0.07/conversation) + Haiku eval pass + Guardrails (~$0.15/1k text units) + AgentCore Runtime + Lambda/DynamoDB/AppSync/CloudFront serverless; no OpenSearch/KB in this kit",
+    "multiple": "~20–35x",
+    "assumes": "~80 calls/day/location, ~60% routine booking/insurance handled ~60% end-to-end at ~5 min/call (twig.so, oralhealthgroup.com); $25/hr loaded receptionist (BLS median $17.90/hr ×~1.4; dental median ~$28/hr per Princess Dental Staffing); ~30% of calls missed, conservatively ~10% recaptured-and-booked at a $150 first-visit value (dentina.ai, peerlogic.com); ~14K agent conversations/yr at ~16.5K tokens each on Bedrock pricing. Research-backed illustrative; validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Single dental practices through multi-location DSOs, and dental practice-management / voice-platform vendors embedding an agent across your customer base",
+    "volume": "Front desks fielding tens to hundreds of inbound calls per day per location, with a meaningful share being routine scheduling and insurance-eligibility questions",
+    "team": "Front-desk / reception staff (1–5 per location) plus a practice manager who owns quality, and — for DSOs/vendors — a small platform engineering team",
+    "triggers": [
+      "Front-desk staff are overwhelmed by routine scheduling and insurance calls and miss in-office patients while on the phone",
+      "After-hours and overflow calls go to voicemail or a costly answering service, and bookings are lost",
+      "A DSO or voice-platform vendor wants one agent pattern deployed across many practices with per-practice hours, policies, and accepted-insurance lists",
+      "Leadership wants measurable conversation quality and HIPAA-safe-language assurance, not an unmonitored chatbot",
+      "Existing IVR / phone tree frustrates patients and can't actually book, reschedule, or answer coverage questions"
+    ],
+    "disqualifiers": [
+      "You want the agent to give clinical/medical advice, diagnoses, or treatment guarantees (explicitly out of scope and blocked by design)",
+      "You need formal HIPAA-compliance certification on day one — the reference runs on synthetic data in demo/PoC posture and needs hardening first",
+      "No structured practice data (providers, schedules, accepted plans) and no willingness to integrate a real scheduling/PMS or insurance source — the kit ships mock services as stand-ins",
+      "You expect fully autonomous handling of escalations, billing disputes, or complaints with no human in the loop"
+    ]
+  },
+  "customerCustomizes": [
+    "Agent system prompts and behavior in `packages/router-agent/src/prompts.py`, `packages/scheduling-agent/src/prompts.py`, and `packages/insurance-agent/src/prompts.py` — intent rules, HIPAA-safe language, escalation triggers, insurance disclaimer wording",
+    "Specialist tools that call back-office systems in `packages/{scheduling,insurance}-agent/src/tools.py` — repoint these from the mock services to your real scheduling/PMS and insurance-eligibility APIs",
+    "The mock services in `packages/mock-services/` (scheduling, insurance, reminders, practice config, patients) — replace with real integrations or seed with your data shape",
+    "Per-practice configuration and multi-tenant data (hours, policies, accepted plans, providers) seeded into the `DentalFrontDesk-*` DynamoDB tables in `infrastructure/unit-1-foundation.yaml`",
+    "Evaluation rubrics, weights, and alert thresholds in `packages/evaluations/src/rubrics.py` and `packages/evaluations/src/alerts.py` — tune accuracy/HIPAA/empathy/policy scoring and per-rubric alert cutoffs to the practice's standards",
+    "Dashboard branding, views, and GraphQL queries in `packages/dashboard-ui/` (React + Vite + Tailwind + Apollo) and `packages/dashboard-api/` (AppSync resolvers)"
+  ],
+  "preBuilt": [
+    "Router + specialist agent pattern (Strands SDK on Bedrock AgentCore Runtime): router classifies intent and delegates to Scheduling and Insurance agents, with escalation-to-human and general-practice-info handling",
+    "Scheduling and Insurance specialist agents with tools for slot search, book/reschedule/cancel, eligibility, coverage, and accepted-plan lookups against the mock services",
+    "Four-stack CloudFormation deployment (foundation mock services, agent gateway, observability/eval pipelines, dashboard) plus AgentCore Runtime deploy script (`scripts/deploy-agent-boto3.py`)",
+    "Observability pipeline: OTEL trace processing, hourly latency (P50/P95/P99) and token-usage aggregation, and Guardrails-fed hallucination-event tracking into DynamoDB",
+    "LLM-as-a-judge evaluation pipeline scoring every interaction on four rubrics (accuracy, HIPAA-safe language, empathy, policy adherence) with weighted composite and threshold-based alerting",
+    "Practice Manager dashboard (React + AppSync GraphQL): real-time metrics, interaction transcripts, quality scores, trends, and alert acknowledge/resolve, all multi-tenant by DynamoDB partition key",
+    "Multi-tenant seed data and 5 demo practices, plus mock-services pytest suites and a `run-test-conversations.py` scored-conversation harness"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed agents, the system prompts and guardrail configuration, the evaluation rubrics and alert thresholds, the patient and practice data, and all AWS infrastructure in your account. The reference ships mock scheduling/insurance/reminder services and synthetic data in a demo/PoC posture — you and your engineering team replace those with real integrations and harden security (auth, encryption, retention, formal HIPAA review) before production. The agent is patient-facing front-desk support with human escalation; it does not give clinical advice and the practice owns every downstream booking and coverage decision. Deploy scripts and CloudFormation are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "healthcare",
+    "dental",
+    "front-desk",
+    "appointment-scheduling",
+    "insurance-verification",
+    "multi-agent",
+    "agentcore",
+    "guardrails",
+    "observability",
+    "multi-tenant"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

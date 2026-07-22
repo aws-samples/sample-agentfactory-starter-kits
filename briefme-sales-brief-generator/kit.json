@@ -1,0 +1,100 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "briefme-sales-brief-generator",
+  "name": "BriefMe Sales Brief Generator",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "cross-vertical",
+    "label": "Cross-vertical"
+  },
+  "subSegment": "field sales, account teams, SDR/BDR orgs, partner/alliance teams",
+  "description": "A self-service web app that turns a company name into a sales-ready brief in under a minute. A single AgentCore-hosted Strands agent on Amazon Nova Premier runs live, cited web research (via Nova Web Grounding) across overview, products, recent news, and key stakeholders, then synthesizes a structured brief rendered as a click-through HTML slideshow. Briefs are persisted and searchable by company, so a rep walks into a meeting prepped instead of spending an hour scraping the web. The pattern applies to any account-research or pre-meeting-prep workflow across industries.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (AgentCore + Nova Premier Web Grounding + CDK serverless stack)",
+  "deployTime": "3–5 days",
+  "services": [
+    "Bedrock AgentCore",
+    "Bedrock",
+    "Lambda",
+    "API Gateway",
+    "DynamoDB",
+    "S3",
+    "CloudFront",
+    "Cognito",
+    "IAM",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.amazon.nova-premier-v1:0"
+  },
+  "outcomes": [
+    "~2–4 hours/week of manual account research reclaimed per rep (illustrative) — benchmark basis: reps report ~5–6 hrs/week on manual account research and Salesforce's State of Sales finds reps spend ~60% of their time on non-selling tasks incl. lead research",
+    "~60–80% faster pre-meeting prep — a structured, cited overview/products/news/talking-points/stakeholders brief generated in under a minute vs. the 1–2 hours reps typically spend researching per call (illustrative)",
+    "Every claim is source-cited via Nova Web Grounding, so reps can verify and trust the brief rather than guessing whether an LLM hallucinated it",
+    "Reusable, searchable brief history per company so account teams stop re-researching the same accounts from scratch"
+  ],
+  "roi": {
+    "savings": "~$320K/yr recovered selling capacity for a 50-rep team (illustrative, research-backed) = 11,500 briefs/yr × 40 min research/brief × 60% replaced × ~$70/hr loaded AE cost. Source basis: Salesforce State of Sales (60% of time on non-selling tasks incl. lead research); Glassdoor AE total pay ~$117K/yr",
+    "cost": "~$7,600/yr (~$0.65/brief) at 11,500 briefs/yr — Nova Premier tokens dominate (~150K input / 20K output per research-heavy brief @ $2.50/$12.50 per 1M ≈ $0.625/brief); Lambda + DynamoDB on-demand + API GW + S3 + CloudFront + Cognito add <$150/yr. No vector store / OpenSearch in this kit (live Web Grounding, not a KB), so no fixed OCU floor",
+    "multiple": "~30–45x",
+    "assumes": "Illustrative, research-backed — validate with your own numbers. Key inputs: 50 reps, 5 briefs/rep/wk, 46 wks/yr, 40 min research/brief × 60% replaced, ~$70/hr loaded AE cost, Nova Premier ~150K in/20K out per brief. Savings basis: Salesforce State of Sales + Glassdoor AE pay; cost computed from AWS Bedrock pricing. not a guarantee."
+  },
+  "idealCustomer": {
+    "size": "Any org with a field-sales, SDR/BDR, or partner team that does account research before meetings — SMB through enterprise",
+    "volume": "Reps preparing for many net-new or expansion meetings per week where pre-call research is a recurring time sink",
+    "team": "Sales / revenue-ops team that wants a self-service prep tool, supported by a small platform or cloud-engineering group to own the deployment",
+    "triggers": [
+      "Reps spend significant time manually researching accounts (company sites, news, LinkedIn) before every meeting",
+      "Leadership wants consistent, cited pre-call briefs instead of each rep's ad-hoc notes of varying quality",
+      "Existing 'AI research' tools are black boxes with no citations the team can verify",
+      "Org wants the research tool inside your own AWS account/boundary, not a third-party SaaS",
+      "Interest in a concrete, low-risk first agentic use case on Bedrock AgentCore + Nova"
+    ],
+    "disqualifiers": [
+      "You need the brief grounded in private/internal CRM or data-room content rather than the public web (this kit only does public web research)",
+      "Requires deployment in a region where Nova Premier + Web Grounding are unavailable, or strict on-prem only",
+      "Expects autonomous outbound action (sending emails, updating CRM) — this kit produces a brief, it takes no actions",
+      "No tolerance for occasional missing/uncited fields on thinly-covered private companies"
+    ]
+  },
+  "customerCustomizes": [
+    "The agent system prompt and the per-topic research queries in `briefme-agent/agent.py` (`SYSTEM_PROMPT`, the `web_research` tool) — what to research and what the brief covers",
+    "The structured brief JSON schema in `briefme-agent/agent.py` (overview / products_services / recent_news / talking_points / stakeholders) to fit your selling motion",
+    "The HTML slideshow look and slide set in `briefme-api/html_renderer.py` — branding, colors, slide order, fields shown",
+    "The model id via the `BRIEFME_MODEL_ID` env var (set in `briefme-infra/lib/briefme-stack.ts`) and the AgentCore IAM grants for the chosen model/tool",
+    "Cognito auth posture in `briefme-infra/lib/briefme-stack.ts` (self-signup, allowed domains, callback URLs) to match your identity policy",
+    "The vanilla-JS frontend in `briefme-frontend/` (search form, history panel, slideshow viewer) for branding and UX"
+  ],
+  "preBuilt": [
+    "A Strands SDK agent on Amazon Nova Premier with a `web_research` tool wrapping the Nova Web Grounding (`nova_grounding`) system tool, capturing source citations per brief (`briefme-agent/`)",
+    "AgentCore Runtime direct-code deployment (no Docker/ECR) via the `BedrockAgentCoreApp` entrypoint and CDK `AgentRuntimeArtifact.fromCodeAsset`",
+    "Two Python Lambdas — `generate_brief` (invokes the runtime, renders HTML, persists) and `get_briefs` (list-by-company + fetch HTML) — behind an HTTP API with a Cognito JWT authorizer",
+    "A self-contained HTML slideshow renderer (`briefme-api/html_renderer.py`) — inline CSS/JS, 7 navigable slides incl. a Sources slide from citations",
+    "Persistence layer: DynamoDB (brief metadata, GSI for company lookup) + private S3 bucket (rendered HTML)",
+    "End-to-end AWS CDK (TypeScript) single-stack deploy: S3 + CloudFront (OAC), Cognito Hosted UI, HTTP API, Lambdas, AgentCore Runtime with a scoped Bedrock IAM policy, and a vanilla-JS frontend"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed agent, the research prompt and brief schema, the generated briefs, and the AWS infrastructure in your account. You and your engineering team adapt the agent prompt, the brief structure, the HTML rendering, and the auth posture to your selling motion and identity policy. The brief is research output for a human seller to read and verify — you own how it is used. Citations are provided so claims can be checked; the agent researches only the public web. Deploy scripts and CDK are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "cross-vertical",
+    "sales-enablement",
+    "account-research",
+    "agentcore",
+    "strands",
+    "nova-premier",
+    "web-grounding",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

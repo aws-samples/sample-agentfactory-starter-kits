@@ -1,0 +1,680 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Intelligent Ticket Triage Agent - Bedrock Agent with RAG, Guardrails, and Lambda tools
+
+Parameters:
+  AwsRegion:
+    Type: String
+    Default: us-east-1
+    AllowedValues: [us-east-1, us-west-2, eu-west-1, ap-southeast-1]
+  TicketSourceWebhookUrl:
+    Type: String
+    Description: Webhook URL for the ticket source (Zendesk/Jira/ServiceNow)
+  ConfidenceThreshold:
+    Type: String
+    Default: '0.9'
+    Description: Minimum confidence score for auto-resolution (0.0-1.0)
+  CustomerNamePrefix:
+    Type: String
+    Default: acme
+    Description: Prefix for resource naming
+    AllowedPattern: '[a-z0-9\-]+'
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID for Lambda functions
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnet IDs for Lambda VPC configuration
+
+Resources:
+  # --- S3 Bucket for Knowledge Base Source Data ---
+  KnowledgeBaseSourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${CustomerNamePrefix}-ticket-triage-kb-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogBucket
+        LogFilePrefix: kb-bucket-logs/
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  KnowledgeBaseSourceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref KnowledgeBaseSourceBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt KnowledgeBaseSourceBucket.Arn
+              - !Sub '${KnowledgeBaseSourceBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  AccessLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${CustomerNamePrefix}-ticket-triage-access-logs-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogBucket
+        LogFilePrefix: self-access-logs/
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldLogs
+            Status: Enabled
+            ExpirationInDays: 90
+
+  AccessLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AccessLogBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt AccessLogBucket.Arn
+              - !Sub '${AccessLogBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+          - Sid: AllowS3LogDelivery
+            Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${AccessLogBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+  # --- OpenSearch Serverless Collection ---
+  OpenSearchCollection:
+    Type: AWS::OpenSearchServerless::Collection
+    DependsOn: OpenSearchEncryptionPolicy
+    Properties:
+      Name: !Sub '${CustomerNamePrefix}-triage-vectors'
+      Type: VECTORSEARCH
+
+  OpenSearchEncryptionPolicy:
+    Type: AWS::OpenSearchServerless::SecurityPolicy
+    Properties:
+      Name: !Sub '${CustomerNamePrefix}-triage-enc'
+      Type: encryption
+      Policy: !Sub |
+        {"Rules":[{"ResourceType":"collection","Resource":["collection/${CustomerNamePrefix}-triage-vectors"]}],"AWSOwnedKey":true}
+
+  OpenSearchNetworkPolicy:
+    Type: AWS::OpenSearchServerless::SecurityPolicy
+    Properties:
+      Name: !Sub '${CustomerNamePrefix}-triage-net'
+      Type: network
+      Policy: !Sub |
+        [{"Rules":[{"ResourceType":"collection","Resource":["collection/${CustomerNamePrefix}-triage-vectors"]},{"ResourceType":"dashboard","Resource":["collection/${CustomerNamePrefix}-triage-vectors"]}],"AllowFromPublic":true}]
+
+  OpenSearchDataAccessPolicy:
+    Type: AWS::OpenSearchServerless::AccessPolicy
+    Properties:
+      Name: !Sub '${CustomerNamePrefix}-triage-access'
+      Type: data
+      Policy: !Sub |
+        [{"Rules":[{"ResourceType":"index","Resource":["index/${CustomerNamePrefix}-triage-vectors/*"],"Permission":["aoss:*"]},{"ResourceType":"collection","Resource":["collection/${CustomerNamePrefix}-triage-vectors"],"Permission":["aoss:*"]}],"Principal":["${KnowledgeBaseRole.Arn}","${BedrockAgentRole.Arn}"]}]
+
+  # --- IAM Roles ---
+  BedrockAgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: BedrockAgentPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AwsRegion}::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+              - Effect: Allow
+                Action:
+                  - bedrock:Retrieve
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AwsRegion}:${AWS::AccountId}:knowledge-base/*'
+              - Effect: Allow
+                Action:
+                  - bedrock:ApplyGuardrail
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AwsRegion}:${AWS::AccountId}:guardrail/*'
+
+  KnowledgeBaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: KnowledgeBasePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt KnowledgeBaseSourceBucket.Arn
+                  - !Sub '${KnowledgeBaseSourceBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AwsRegion}::foundation-model/amazon.titan-embed-text-v2:0'
+              - Effect: Allow
+                Action:
+                  - aoss:APIAccessAll
+                Resource:
+                  - !Sub 'arn:aws:aoss:${AwsRegion}:${AWS::AccountId}:collection/*'
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: LambdaBedrockPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:Retrieve
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AwsRegion}:${AWS::AccountId}:knowledge-base/*'
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource:
+                  - !Sub 'arn:aws:bedrock:${AwsRegion}::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AwsRegion}:${AWS::AccountId}:*'
+
+  # --- Lambda Supporting Resources ---
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda functions - allows HTTPS egress to AWS services
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/8
+          Description: Allow HTTPS egress to internal VPC endpoints and AWS services
+
+  LambdaDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 1209600
+
+  LambdaEnvironmentKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for Lambda environment variable encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowRootAccountAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowLambdaUse
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: '*'
+
+  # --- Lambda Functions ---
+  ClassifyTicketFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${CustomerNamePrefix}-classify-ticket'
+      Runtime: python3.12
+      Handler: classify-ticket.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: 10
+      KmsKeyArn: !GetAtt LambdaEnvironmentKmsKey.Arn
+      DeadLetterConfig:
+        TargetArn: !GetAtt LambdaDeadLetterQueue.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !Ref PrivateSubnetIds
+      Environment:
+        Variables:
+          CONFIDENCE_THRESHOLD: !Ref ConfidenceThreshold
+          KNOWLEDGE_BASE_ID: !Ref TicketKnowledgeBase
+      Code:
+        ZipFile: |
+          # Placeholder - replaced by src/agent/tools/classify-ticket.py during deploy
+          def lambda_handler(event, context):
+              pass
+
+  RouteTicketFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${CustomerNamePrefix}-route-ticket'
+      Runtime: python3.12
+      Handler: route-ticket.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: 10
+      KmsKeyArn: !GetAtt LambdaEnvironmentKmsKey.Arn
+      DeadLetterConfig:
+        TargetArn: !GetAtt LambdaDeadLetterQueue.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !Ref PrivateSubnetIds
+      Environment:
+        Variables:
+          WEBHOOK_URL: !Ref TicketSourceWebhookUrl
+      Code:
+        ZipFile: |
+          # Placeholder - replaced by src/agent/tools/route-ticket.py during deploy
+          def lambda_handler(event, context):
+              pass
+
+  ResolveTicketFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${CustomerNamePrefix}-resolve-ticket'
+      Runtime: python3.12
+      Handler: resolve-ticket.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      ReservedConcurrentExecutions: 10
+      KmsKeyArn: !GetAtt LambdaEnvironmentKmsKey.Arn
+      DeadLetterConfig:
+        TargetArn: !GetAtt LambdaDeadLetterQueue.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !Ref PrivateSubnetIds
+      Environment:
+        Variables:
+          CONFIDENCE_THRESHOLD: !Ref ConfidenceThreshold
+          KNOWLEDGE_BASE_ID: !Ref TicketKnowledgeBase
+          WEBHOOK_URL: !Ref TicketSourceWebhookUrl
+      Code:
+        ZipFile: |
+          # Placeholder - replaced by src/agent/tools/resolve-ticket.py during deploy
+          def lambda_handler(event, context):
+              pass
+
+  # Lambda permissions for Bedrock Agent invocation
+  ClassifyTicketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ClassifyTicketFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceArn: !GetAtt TriageAgent.AgentArn
+
+  RouteTicketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RouteTicketFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceArn: !GetAtt TriageAgent.AgentArn
+
+  ResolveTicketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ResolveTicketFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceArn: !GetAtt TriageAgent.AgentArn
+
+  # --- Bedrock Guardrail ---
+  TriageGuardrail:
+    Type: AWS::Bedrock::Guardrail
+    Properties:
+      Name: !Sub '${CustomerNamePrefix}-triage-guardrail'
+      Description: PII redaction, topic boundaries, and grounding for ticket triage
+      BlockedInputMessaging: "I can only help with support ticket triage. Please submit a valid support ticket."
+      BlockedOutputsMessaging: "I cannot provide that response as it may contain sensitive information or is outside my scope."
+      SensitiveInformationPolicyConfig:
+        PiiEntitiesConfig:
+          - Type: EMAIL
+            Action: ANONYMIZE
+          - Type: PHONE
+            Action: ANONYMIZE
+          - Type: SSN
+            Action: BLOCK
+          - Type: CREDIT_DEBIT_CARD_NUMBER
+            Action: BLOCK
+      TopicPolicyConfig:
+        TopicsConfig:
+          - Name: off-topic
+            Definition: Requests unrelated to support tickets, product issues, or customer service
+            Examples:
+              - "Write me a poem"
+              - "What's the weather like?"
+              - "Help me with my homework"
+            Type: DENY
+      ContentPolicyConfig:
+        FiltersConfig:
+          - Type: SEXUAL
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: VIOLENCE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: HATE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: INSULTS
+            InputStrength: MEDIUM
+            OutputStrength: HIGH
+
+  # --- Bedrock Knowledge Base ---
+  TicketKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    DependsOn: OpenSearchCollection
+    Properties:
+      Name: !Sub '${CustomerNamePrefix}-ticket-history-kb'
+      Description: Historical ticket data and product documentation for RAG
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: !Sub 'arn:aws:bedrock:${AwsRegion}::foundation-model/amazon.titan-embed-text-v2:0'
+      StorageConfiguration:
+        Type: OPENSEARCH_SERVERLESS
+        OpensearchServerlessConfiguration:
+          CollectionArn: !GetAtt OpenSearchCollection.Arn
+          VectorIndexName: !Sub '${CustomerNamePrefix}-ticket-index'
+          FieldMapping:
+            VectorField: embedding
+            TextField: text
+            MetadataField: metadata
+
+  KnowledgeBaseDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      KnowledgeBaseId: !Ref TicketKnowledgeBase
+      Name: !Sub '${CustomerNamePrefix}-ticket-data'
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: !GetAtt KnowledgeBaseSourceBucket.Arn
+      VectorIngestionConfiguration:
+        ChunkingConfiguration:
+          ChunkingStrategy: FIXED_SIZE
+          FixedSizeChunkingConfiguration:
+            MaxTokens: 512
+            OverlapPercentage: 20
+
+  # --- Bedrock Agent ---
+  TriageAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: !Sub '${CustomerNamePrefix}-triage-orchestrator'
+      Description: Intelligent ticket triage agent - classifies, routes, and auto-resolves support tickets
+      AgentResourceRoleArn: !GetAtt BedrockAgentRole.Arn
+      FoundationModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+      IdleSessionTTLInSeconds: 600
+      Instruction: !Sub |
+        You are an intelligent support ticket triage agent. Your job is to analyze incoming support tickets and take the appropriate action.
+
+        For each ticket:
+        1. Call classify_ticket to determine category, priority, and complexity
+        2. If the ticket is auto-resolvable (confidence >= ${ConfidenceThreshold} and complexity is "auto-resolvable"), call resolve_ticket to generate and send a response
+        3. Otherwise, call route_ticket to assign it to the appropriate team with enriched context
+
+        Always use the knowledge base to ground your decisions in historical ticket data. Never fabricate solutions. If confidence is below threshold, route to a human.
+      GuardrailConfiguration:
+        GuardrailIdentifier: !GetAtt TriageGuardrail.GuardrailId
+        GuardrailVersion: DRAFT
+      KnowledgeBases:
+        - KnowledgeBaseId: !Ref TicketKnowledgeBase
+          Description: Historical ticket data and product documentation
+          KnowledgeBaseState: ENABLED
+      ActionGroups:
+        - ActionGroupName: classify-ticket
+          Description: Classifies a ticket by category, priority, and complexity
+          ActionGroupExecutor:
+            Lambda: !GetAtt ClassifyTicketFunction.Arn
+          FunctionSchema:
+            Functions:
+              - Name: classify_ticket
+                Description: Analyze ticket text and metadata to determine category, priority, and complexity
+                Parameters:
+                  ticket_text:
+                    Type: string
+                    Description: The full text content of the support ticket
+                    Required: true
+                  customer_tier:
+                    Type: string
+                    Description: "Customer tier: enterprise, business, or free"
+                    Required: false
+                  product_area:
+                    Type: string
+                    Description: Product area the ticket relates to
+                    Required: false
+        - ActionGroupName: route-ticket
+          Description: Routes a classified ticket to the appropriate team
+          ActionGroupExecutor:
+            Lambda: !GetAtt RouteTicketFunction.Arn
+          FunctionSchema:
+            Functions:
+              - Name: route_ticket
+                Description: Route a classified ticket to the correct support team with enriched context
+                Parameters:
+                  ticket_id:
+                    Type: string
+                    Description: Unique identifier for the ticket
+                    Required: true
+                  category:
+                    Type: string
+                    Description: "Ticket category: bug, feature_request, billing, access"
+                    Required: true
+                  priority:
+                    Type: string
+                    Description: "Priority level: P1, P2, P3, P4"
+                    Required: true
+                  complexity:
+                    Type: string
+                    Description: "Complexity: L1, L2, engineering"
+                    Required: true
+                  context_summary:
+                    Type: string
+                    Description: Summary of relevant context from knowledge base for the receiving team
+                    Required: true
+        - ActionGroupName: resolve-ticket
+          Description: Auto-resolves a ticket using knowledge base content
+          ActionGroupExecutor:
+            Lambda: !GetAtt ResolveTicketFunction.Arn
+          FunctionSchema:
+            Functions:
+              - Name: resolve_ticket
+                Description: Generate and send an auto-resolution response for a ticket
+                Parameters:
+                  ticket_id:
+                    Type: string
+                    Description: Unique identifier for the ticket
+                    Required: true
+                  ticket_text:
+                    Type: string
+                    Description: Original ticket text
+                    Required: true
+                  resolution_text:
+                    Type: string
+                    Description: The proposed resolution response to send to the customer
+                    Required: true
+                  confidence:
+                    Type: number
+                    Description: Confidence score for the resolution (0.0-1.0)
+                    Required: true
+
+  # --- CloudWatch Dashboard ---
+  TriageDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub '${CustomerNamePrefix}-ticket-triage'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0, "y": 0, "width": 8, "height": 6,
+              "properties": {
+                "title": "Ticket Volume",
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${CustomerNamePrefix}-classify-ticket", {"stat": "Sum", "period": 3600}]
+                ],
+                "region": "${AwsRegion}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 8, "y": 0, "width": 8, "height": 6,
+              "properties": {
+                "title": "Auto-Resolution Rate",
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${CustomerNamePrefix}-resolve-ticket", {"stat": "Sum", "period": 3600}],
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${CustomerNamePrefix}-route-ticket", {"stat": "Sum", "period": 3600}]
+                ],
+                "region": "${AwsRegion}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 16, "y": 0, "width": 8, "height": 6,
+              "properties": {
+                "title": "Latency (Classification)",
+                "metrics": [
+                  ["AWS/Lambda", "Duration", "FunctionName", "${CustomerNamePrefix}-classify-ticket", {"stat": "Average", "period": 300}]
+                ],
+                "region": "${AwsRegion}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "Errors",
+                "metrics": [
+                  ["AWS/Lambda", "Errors", "FunctionName", "${CustomerNamePrefix}-classify-ticket", {"stat": "Sum", "period": 300}],
+                  ["AWS/Lambda", "Errors", "FunctionName", "${CustomerNamePrefix}-route-ticket", {"stat": "Sum", "period": 300}],
+                  ["AWS/Lambda", "Errors", "FunctionName", "${CustomerNamePrefix}-resolve-ticket", {"stat": "Sum", "period": 300}]
+                ],
+                "region": "${AwsRegion}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "Agent Invocations",
+                "metrics": [
+                  ["AWS/Bedrock", "Invocations", "AgentId", "${TriageAgent.AgentId}", {"stat": "Sum", "period": 3600}]
+                ],
+                "region": "${AwsRegion}"
+              }
+            }
+          ]
+        }
+
+Outputs:
+  AgentId:
+    Description: Bedrock Agent ID
+    Value: !GetAtt TriageAgent.AgentId
+  KnowledgeBaseId:
+    Description: Knowledge Base ID
+    Value: !Ref TicketKnowledgeBase
+  S3BucketName:
+    Description: S3 bucket for Knowledge Base source data
+    Value: !Ref KnowledgeBaseSourceBucket
+  GuardrailId:
+    Description: Guardrail ID
+    Value: !GetAtt TriageGuardrail.GuardrailId
+  DashboardUrl:
+    Description: CloudWatch Dashboard URL
+    Value: !Sub 'https://${AwsRegion}.console.aws.amazon.com/cloudwatch/home?region=${AwsRegion}#dashboards:name=${CustomerNamePrefix}-ticket-triage'
+  ClassifyTicketFunctionName:
+    Description: Lambda function name for the classify-ticket action group
+    Value: !Ref ClassifyTicketFunction
+  RouteTicketFunctionName:
+    Description: Lambda function name for the route-ticket action group
+    Value: !Ref RouteTicketFunction
+  ResolveTicketFunctionName:
+    Description: Lambda function name for the resolve-ticket action group
+    Value: !Ref ResolveTicketFunction

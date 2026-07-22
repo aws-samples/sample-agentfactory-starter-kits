@@ -1,0 +1,97 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "manufacturing-operations-hub",
+  "name": "Manufacturing Operations Hub",
+  "version": "1.0",
+  "status": "published",
+  "vertical": {
+    "id": "manufacturing",
+    "label": "Manufacturing & Industrial"
+  },
+  "subSegment": "discrete manufacturing, plant operations, supply-chain ops",
+  "description": "A working text-to-SQL agent that lets manufacturing teams ask natural-language questions about your MES (Manufacturing Execution System) data and get answers, charts, and daily production-meeting briefings — without writing SQL or waiting on a BI ticket. Built on the Strands Agents SDK over Amazon Bedrock, it ships two surfaces: an MES Insight Chat for ad-hoc analysis across production, quality, equipment, and inventory, and a Daily Production Meeting dashboard that pre-computes KPIs and AI insights so lean meetings start with answers instead of slide prep. Read-only by design (a SELECT-only query guard blocks any write); demoed on a synthetic e-bike-factory database, it repoints to any operational SQL store by swapping the schema and connection.",
+  "buildLevel": "managed-harness",
+  "buildLevelLabel": "Managed Harness (Strands Agents SDK + Streamlit)",
+  "deployTime": "3–5 days",
+  "services": [
+    "Bedrock",
+    "Bedrock AgentCore",
+    "SageMaker",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  "outcomes": [
+    "4–8 hours/week saved per production analyst and shift supervisor who today hand-build spreadsheets or wait on the BI team — frontline supervisors can lose up to ~4 hours per shift reconciling disconnected data",
+    "70–90% reduction in daily production-meeting prep — OEE, completion rates, quality, and inventory status are pre-computed instead of assembled into slides every morning (typically 30–60 min/day today)",
+    "Natural-language access to MES data for non-technical staff across production, quality, equipment, and inventory — answers in seconds instead of a days-long BI ticket",
+    "Auditable, reproducible answers — every response is grounded in a read-only SELECT against the operational database, with the generated SQL shown"
+  ],
+  "roi": {
+    "savings": "$100K–300K/year per plant (illustrative) in reclaimed analyst/supervisor time plus faster, better-informed daily meetings",
+    "cost": "$5K–20K/year — Bedrock (Claude Haiku 4.5 via cross-region inference) text-to-SQL invocations + compute hosting the agent and Streamlit UI (no Knowledge Base / vector store required)",
+    "multiple": "~10–30x",
+    "assumes": "Illustrative: one plant running daily lean meetings with 5–15 attendees, ~8 analysts/supervisors at ~$60/hr loaded fielding recurring ad-hoc MES questions (frontline supervisors can lose up to ~4 hrs/shift reconciling disconnected data today). Validate with your own numbers against current meeting-prep hours and BI-request backlog."
+  },
+  "idealCustomer": {
+    "size": "Discrete manufacturers (automotive, industrial equipment, electronics, consumer goods) running an MES, historian, or equivalent operational data store across one or more plants",
+    "volume": "One or more plants running daily production/lean meetings; a structured MES/quality/maintenance data store that staff query regularly",
+    "team": "Plant/operations leadership, production supervisors, quality and maintenance engineers — supported by a small data/BI team that is a bottleneck for ad-hoc questions",
+    "triggers": [
+      "Daily production meetings burn 30–60 minutes of prep assembling the same KPIs into slides every morning",
+      "Production, quality, and maintenance staff can't query MES data themselves — every question becomes a BI/IT ticket with days of latency",
+      "MES/historian data exists but is locked behind fixed dashboards that don't answer ad-hoc 'why' questions",
+      "Leadership wants a consistent single source of truth for daily status across production, quality, equipment, and inventory",
+      "The team is exploring GenAI for operations and wants a concrete, low-risk (read-only) starting point"
+    ],
+    "disqualifiers": [
+      "No structured operational data store — data lives only in PLCs, on paper, or in disconnected spreadsheets (a queryable database is a prerequisite)",
+      "You expect the agent to write back to or control the MES / shop floor (this is read-only analytics, not MES control)",
+      "Hard requirement for fully on-prem inference with no cloud connectivity (the kit is Bedrock-native)",
+      "Single-line shop with no recurring meeting or reporting burden — the overhead won't pay back"
+    ]
+  },
+  "customerCustomizes": [
+    "Database connection — repoint the SQLAlchemy layer in `app_factory/shared/database.py` from the bundled SQLite `mes.db` to your MES/historian (Postgres, etc.); the data layer is already DB-agnostic",
+    "The text-to-SQL system prompt + domain framing in `app_factory/mes_agents/mes_analysis_agent.py` to match your tables, terminology, and KPIs",
+    "The four specialized meeting sub-agents (production, quality, equipment, inventory) and orchestrator routing in `app_factory/production_meeting_agents/production_meeting_agent.py`",
+    "Dashboard tabs and pre-computed metrics in `app_factory/production_meeting/dashboards/` for your meeting cadence",
+    "Model selection in `app_factory/mes_agents/config.py` (Claude Haiku 4.5 default; Nova Lite/Pro and Claude Sonnet also wired)",
+    "The synthetic data generator in `app_factory/data_generator/` — used for demos, replaced by your live data connection"
+  ],
+  "preBuilt": [
+    "MES Insight Chat — a Strands SDK text-to-SQL agent with three tools: `run_sqlite_query` (SELECT-only guarded), `get_database_schema`, and `create_intelligent_visualization`",
+    "Daily Production Meeting dashboard — an orchestrator plus four specialized sub-agents (production / quality / equipment / inventory) with daily-briefing fan-out",
+    "Streamlit UI for both surfaces, plus action-item tracking, meeting notes, and weekly reports",
+    "Schema-first text-to-SQL pattern with intelligent error recovery and query-reformulation suggestions",
+    "DB-agnostic SQLAlchemy data layer (SQLite today, Postgres-ready) with a SELECT-only safety guard that blocks INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/TRUNCATE",
+    "Synthetic MES database generator (e-bike factory: work orders, OEE, quality, inventory, downtime) for demos, plus an educational text-to-SQL notebook",
+    "Daily analysis scheduler that pre-computes and caches AI insights for sub-second dashboard loads"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference, not a managed service. The reference implementation is an MIT-licensed AWS sample (Strands Agents SDK + Streamlit) that you and your team repoint from the synthetic database to your MES/operational store. Once deployed, you own the running agent, the database connection, the system prompts, and the AWS account. The kit is read-only by design — the agent issues SELECT queries only and never writes to or controls the MES or shop floor. Scripts are provided as-is; partners can offer managed support engagements if needed.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "manufacturing",
+    "mes",
+    "text-to-sql",
+    "natural-language-query",
+    "strands-agents",
+    "bedrock",
+    "streamlit",
+    "production-analytics",
+    "oee",
+    "managed-harness"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-04",
+    "lastUpdated": "2026-06-04"
+  }
+}

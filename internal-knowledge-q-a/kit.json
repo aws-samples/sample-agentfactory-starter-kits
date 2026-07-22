@@ -1,0 +1,94 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "internal-knowledge-q-a",
+  "name": "Internal Knowledge Q&A",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "cross-vertical",
+    "label": "Cross-vertical"
+  },
+  "subSegment": "any org with scattered internal documentation — engineering, HR, IT, and operations teams fielding repetitive 'where do I find X?' questions",
+  "description": "Answers employee questions by retrieving from the company's own document repositories — wikis, runbooks, policy docs, HR handbooks, engineering specs, SOPs. Grounded in your own knowledge with citations. Replaces 'where can I find X?' Slack pings and reduces support load on senior engineers, HR, and ops teams. Generic by design — applies across every vertical with the right KB content.",
+  "buildLevel": "managed-harness",
+  "buildLevelLabel": "AgentCore Managed Harness",
+  "deployTime": "3–5 days",
+  "services": [
+    "Bedrock",
+    "AgentCore Managed Harness",
+    "Knowledge Bases",
+    "Guardrails",
+    "S3",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  },
+  "outcomes": [
+    "30–50% reduction in time spent hunting for internal information — knowledge workers spend ~9 hours/week searching today (McKinsey; IDC ~8.8 hrs/week)",
+    "~2–4 hours/week recovered per knowledge worker on documentation searches",
+    "Citation-grounded answers — every response links to the source document",
+    "Improved onboarding velocity with always-available answers from the company's own documentation"
+  ],
+  "roi": {
+    "savings": "$300K–1.5M/year (illustrative), scaling with adoption and headcount",
+    "cost": "$15K–45K/year — Bedrock invocations + Knowledge Base (OpenSearch Serverless ~$350/mo floor) + S3 + CloudWatch, scaling with query volume",
+    "multiple": "~10–40x",
+    "assumes": "Illustrative: ~500 employees with established internal docs; knowledge workers spend ~9 hrs/week searching (McKinsey/IDC), ~2–4 hrs/week recovered at ~$55/hr loaded. Validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Any company with 100+ employees and a meaningful corpus of internal documentation. Sweet spot is mid-market organizations (250–5000 employees) where senior staff are still answering basic doc questions but the company is too large for everyone to know everyone.",
+    "volume": "Internal docs spanning 1000+ pages across wikis, SharePoint, Confluence, Notion, Google Drive, or similar",
+    "team": "Whichever team owns internal communications, knowledge management, or developer experience",
+    "triggers": [
+      "Senior staff repeatedly answering the same 'where can I find X?' questions",
+      "New-hire onboarding velocity bottlenecked on tribal knowledge",
+      "Documentation exists but no one can find it — the search bar in the wiki is a joke",
+      "Slack channels like #ask-eng or #ask-hr drowning in low-value lookups",
+      "Compliance/audit pressure to make policy documents discoverable"
+    ],
+    "disqualifiers": [
+      "Documentation doesn't exist (this kit retrieves; it doesn't author)",
+      "Documents are scattered across formats with no extraction pipeline (PDFs without OCR, scanned images, video-only training)",
+      "Strict information barriers required between teams (kit is single-tenant by default; multi-tenant with row-level access control is a larger build)"
+    ]
+  },
+  "customerCustomizes": [
+    "Source document connections (Confluence, SharePoint, Google Drive, Notion, S3, GitHub wikis, custom)",
+    "Document refresh cadence and ingestion triggers",
+    "Vertical-specific terminology and synonym dictionaries",
+    "Guardrail rules (PII redaction, off-topic refusal, escalation language)",
+    "Channel surfaces (Slack bot, web chat, internal portal embed, Teams)",
+    "Citation format and source-link conventions"
+  ],
+  "preBuilt": [
+    "AgentCore Managed Harness configured for retrieval-grounded Q&A",
+    "Knowledge Bases structure with chunking + embedding strategy",
+    "Guardrails template (PII redaction, off-topic refusal, citation requirement, no fabrication)",
+    "System prompt enforcing 'cite or decline' behavior",
+    "CloudWatch dashboard (queries/day, citation rate, refusal rate, latency, top documents accessed)",
+    "AGENTS.md + build-spec/ contract for a coding agent to implement"
+  ],
+  "sharedResponsibility": "This kit is an accelerator, not a managed service. You own the deployed harness, the document ingestion pipeline, and the data in your account. Sensitive documents stay in your S3/SharePoint/Confluence; the agent retrieves on demand and the model never sees data it isn't entitled to.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "cross-vertical",
+    "knowledge-management",
+    "internal-tools",
+    "rag",
+    "search",
+    "agentcore-harness",
+    "employee-experience"
+  ],
+  "metadata": {
+    "createdAt": "2026-05-28",
+    "lastUpdated": "2026-06-03"
+  }
+}

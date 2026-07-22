@@ -1,0 +1,105 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "tropicraft-ordering-agent",
+  "name": "TropiCraft Ordering Agent",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "retail-consumer",
+    "label": "Retail & Consumer"
+  },
+  "subSegment": "quick-service restaurants, cafe & smoothie chains, food-and-beverage ordering (web + voice)",
+  "description": "A conversational ordering agent for quick-service food and beverage. A single Bedrock (Claude) assistant named Sunny greets each guest, discovers what they want in natural language, recommends items using time-of-day, season, taste history and order history, enforces a zero-tolerance allergen/dietary safety rule on every suggestion, upsells within strict frequency limits, and drives the full cart-to-checkout flow with Bedrock tool use. Text and voice are both supported (Transcribe in, Polly out). The same pattern applies to any menu- or catalog-driven ordering experience where decision friction and dietary safety are the problem.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (CDK: Bedrock Converse tool-use + 5 Lambda microservices + DynamoDB + Transcribe/Polly voice)",
+  "deployTime": "5–8 days",
+  "services": [
+    "Bedrock",
+    "Lambda",
+    "API Gateway",
+    "DynamoDB",
+    "EventBridge",
+    "Transcribe",
+    "Polly",
+    "S3",
+    "CloudWatch",
+    "X-Ray",
+    "IAM",
+    "CloudFormation"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-3-sonnet-20240229-v1:0"
+  },
+  "outcomes": [
+    "4–8% lift in average order value from contextual, frequency-capped upselling that respects opt-outs — conservative vs. the 10.3% higher AOV Salesforce's Shopping Index attributes to recommendation-engaged visits and McKinsey's 10–15% personalization revenue lift (illustrative; validate with your own numbers)",
+    "Recovers a share of abandoned orders against the ~50% cart-abandonment baseline Baymard reports for food/grocery — guided one-question-at-a-time discovery replaces static-menu friction and surfaces dietary fit before checkout",
+    "Zero allergen-unsafe recommendations — dietary restrictions and allergies are enforced as a hard safety rule on every suggestion, overriding all other recommendation logic",
+    "Order-taking labor deflected to self-service on web and voice as guests self-complete discovery, customization, and checkout (deflection volume an internal estimate — validate with your own numbers)"
+  ],
+  "roi": {
+    "savings": "~$1.0M/yr illustrative incremental revenue — 4,000 orders/day × $11.50 AOV × 6% AOV lift (conservative vs. Salesforce Shopping Index's 10.3% recommendation-engaged AOV uplift)",
+    "cost": "~$265K/yr — Claude 3 Sonnet Converse at ~$0.16/text conversation (~45K input / 1.8K output tokens over ~10 tool-use rounds, full menu re-injected per call) + ~$0.07/voice conversation (Transcribe $0.024/min + Polly Neural $16/1M chars) at a 30% voice mix, × ~1.46M conversations/yr; Lambda/DynamoDB/API GW negligible; no OpenSearch (menu lives in the prompt, not a KB)",
+    "multiple": "~3.8x revenue (~1.9x at 50% margin)",
+    "assumes": "4,000 orders/day, $11.50 AOV, 6% AOV lift (conservative vs. Salesforce Shopping Index 10.3%; McKinsey 10–15% personalization lift; Baymard ~50% food cart abandonment), ~8 turns / ~10 Converse calls per conversation, 30% voice mix; AWS pricing per aws.amazon.com/bedrock/pricing. Research-backed illustrative — validate with your own numbers, not a commitment."
+  },
+  "idealCustomer": {
+    "size": "Quick-service restaurants, cafe / smoothie / juice chains, and multi-location F&B operators with a digital ordering channel",
+    "volume": "Hundreds to thousands of online/app orders per day; a menu large enough that guests stall on choice and dietary fit matters (allergens, vegan, gluten-free, keto)",
+    "team": "A small digital/e-commerce or product team (2–6) plus marketing for menu/brand voice; no in-house ML team required",
+    "triggers": [
+      "Cart abandonment or low conversion on a static online-ordering menu where guests can't easily find what fits your diet",
+      "Allergen and dietary-restriction handling is manual, inconsistent, or a stated liability concern",
+      "Marketing wants contextual upsell/AOV lift but blanket prompts annoy customers and get ignored",
+      "Brand wants a differentiated, on-voice ordering experience (a named assistant) on web — and ideally voice — without building an ML stack",
+      "Order-taking labor (phone, counter, chat) is a cost the team wants to deflect to self-service"
+    ],
+    "disqualifiers": [
+      "You expect the agent to autonomously charge payment or fulfill orders — this kit stops at order confirmation; payment and POS/fulfillment integration are out of scope",
+      "No structured menu data with ingredients/allergens/dietary flags to ground recommendations and safety rules",
+      "Strict on-premises-only requirement (kit is cloud-native on Bedrock + serverless AWS)",
+      "Order volume too low for the build and per-conversation model cost to pay back"
+    ]
+  },
+  "customerCustomizes": [
+    "The menu the agent reasons over — `services/conversation/src/core/menu-data.ts` (embedded in the system prompt) and the seeded `services/menu` DynamoDB data, including ingredients, allergens, and dietary flags",
+    "Sunny's persona, dietary-safety rules, and upselling rules in the system prompt builder `services/conversation/src/core/prompt-builder.ts`",
+    "The agent's action surface — the Bedrock tool definitions in `services/conversation/src/core/tool-definitions.ts` (addToCart, removeFromCart, modifyCartItem, getCartSummary, checkout) and your handlers in `tool-executor.ts`",
+    "Pricing, tax, and checkout logic in `services/cart/src/core/` (the kit confirms an order but does not take payment)",
+    "Voice settings in `services/voice/src/core/` — Transcribe language/format and the Polly voice/engine (`Joanna`, neural)",
+    "Model id, token limits, temperature, timeout, retries, and session TTL via the Conversation Lambda environment in `infrastructure/lib/tropical-smoothie-stack.ts`",
+    "Frontend branding, chat UI, and hosting choice (the React/Vite SPA in `frontend/`; CDK provisions the backend, not frontend hosting)"
+  ],
+  "preBuilt": [
+    "Bedrock Converse tool-use orchestration loop (`services/conversation/src/core/conversation.ts`) — multi-round tool calling, AI-initiated cold-start greeting, and conversation-state machine (INIT → GREETING → EXPLORING → ORDERING → COMPLETED)",
+    "Monolithic system-prompt builder that injects the full menu, dietary-safety rules, upsell governor (max 2/order, opt-out aware), live cart, and time/season recommendation context per turn",
+    "Five Lambda microservices (conversation, menu, cart, user, voice) behind one API Gateway, with five DynamoDB tables and a 30-minute-TTL session store",
+    "Voice pipeline — Amazon Transcribe (speech-to-text via S3 job) and Amazon Polly (neural TTS, presigned S3 URL) wired to a `useVoiceRecorder` frontend hook",
+    "EventBridge-based async preference learning (preference-detector + event publisher → User service rules) and an order-completed event",
+    "Full AWS CDK stack with least-privilege IAM per Lambda, X-Ray tracing, CloudWatch operational dashboard, and prompt-injection guardrails baked into the system prompt",
+    "React + Vite + Tailwind SPA (chat, cart, voice, auth) with MSW mocks and a Vitest/RTL test suite for local development without AWS"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed Lambdas and agent, the menu/allergen data, the prompt and upsell rules, the pricing/checkout logic, and all AWS infrastructure and customer data (sessions, accounts, carts, orders, voice audio) in your own account. You and your engineering team adapt the menu data, system prompt, tools, and voice settings to the brand. The agent confirms orders only — payment capture, POS/fulfillment integration, and production authentication are your responsibility. Deploy scripts and CDK are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "retail-consumer",
+    "quick-service-restaurant",
+    "conversational-ordering",
+    "tool-use",
+    "voice",
+    "allergen-safety",
+    "bedrock",
+    "claude",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "code-intelligence-agent",
+  "name": "Code Intelligence Agent",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "software",
+    "label": "Software & Internet"
+  },
+  "subSegment": "engineering-led orgs with non-technical stakeholders (execs, security, compliance, M&A diligence) who need code-level answers without a developer in the loop",
+  "description": "An MCP server that lets anyone ask natural-language questions about a GitHub codebase and get answers grounded in the actual code, with file:line citations — surfaced through Amazon Quick, no local clone or git skills required. It ingests repos via the GitHub API (no clone), chunks code AST-aware, embeds it with Bedrock Titan, and synthesizes cited answers with Claude, tailoring depth to the asker's role (executive, architect, security, developer). GitHub OAuth identity is passed through per user so the agent only answers over repos that user can actually see.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (SAM: MCP Lambda + DynamoDB + S3/FAISS + Bedrock + Guardrails)",
+  "deployTime": "5–8 days",
+  "services": [
+    "Lambda",
+    "API Gateway",
+    "DynamoDB",
+    "S3",
+    "SQS",
+    "Bedrock",
+    "Bedrock Guardrails",
+    "KMS",
+    "CloudWatch",
+    "X-Ray",
+    "IAM"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  "outcomes": [
+    "~2 hrs/week of engineer time reclaimed per person — a conservative slice of the ~58% of developer time research shows goes to comprehending code (ACM/CACM, 2023); ~$410K/yr illustrative for a 50-engineer team at a BLS-derived ~$90/hr loaded rate",
+    "Cross-repo questions ('which services touch PII / are on the deprecated library / depend on this module?') answered in minutes with file:line citations, instead of the days a manual audit or grep-sweep takes — and always current, not a stale point-in-time report",
+    "Cuts onboarding and M&A code-diligence time by making the codebase an answerable knowledge base rather than a repo a human has to read",
+    "Role-aware answers from one agent — execs get plain-language summaries, security gets cited findings, developers get full code detail — without standing up separate tools"
+  ],
+  "roi": {
+    "savings": "~$410K/year (illustrative) — 50 engineers × ~2 hrs/wk of code-comprehension time reclaimed × $90/hr loaded; the 2 hrs is a conservative ~9% slice of the ~58% of dev time research shows goes to comprehending code",
+    "cost": "~$3K/year — Bedrock Claude Sonnet 4.5 synthesis (~$0.04/query × ~50K queries/yr) + Titan embeddings + serverless Lambda/DynamoDB/S3/SQS/KMS/CloudWatch + Guardrails; FAISS-on-S3 avoids the OpenSearch OCU floor",
+    "multiple": "~80–140x",
+    "assumes": "Key inputs: BLS May-2024 software-developer median wage $133,080 → ~$90/hr loaded (~1.4x burden, /2,080 hrs); ~58% of dev time on code comprehension (ACM/CACM 2023); illustrative 50-engineer team, ~2 hrs/wk reclaimed/engineer, ~200 queries/day; AWS Bedrock + service pricing for cost. Research-backed illustrative — not a guarantee; validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Engineering-led orgs from growing startups (10→100 engineers) to multi-team enterprises (50+ devs), plus regulated FinServ/Healthcare/Gov and PE/M&A teams running code diligence",
+    "volume": "10+ repositories with non-trivial cross-repo relationships; stakeholders outside engineering repeatedly needing code-level answers",
+    "team": "A platform/engineering group to own the deployment, serving non-engineering stakeholders (execs, security, compliance, architects) as the primary askers",
+    "triggers": [
+      "Non-engineers (execs, security, compliance, product) keep asking developers 'what does our code do here?' and it doesn't scale",
+      "Audit or compliance pressure to answer 'show me every service handling PII and confirm encryption' across many repos on demand",
+      "Already using or evaluating Amazon Quick and hitting limits indexing a large GitHub org (ingestion failures, no incremental sync, no code-aware chunking)",
+      "M&A / PE diligence or platform-migration tracking that needs fast, current answers about an unfamiliar or sprawling codebase",
+      "Tribal knowledge bottleneck as the team grows — onboarding and 'how does this flow work end-to-end?' eat senior-engineer time"
+    ],
+    "disqualifiers": [
+      "Wants a developer IDE copilot / code-completion tool (this is organizational code Q&A, not a Copilot/Kiro replacement)",
+      "Source is not in a GitHub-API-reachable host, or you can't grant OAuth/webhook access",
+      "Requires fully on-premises deployment with no Bedrock access",
+      "Expects the agent to write code, open PRs, or take autonomous actions (it answers questions; it does not modify repos)"
+    ]
+  },
+  "customerCustomizes": [
+    "Bedrock Guardrail policy (`template.yaml` → `CodeIntelGuardrail`) — content filters, PII entities, and the secret-redaction regexes for your compliance posture",
+    "Role-based response filtering in `src/query_engine/role_filter.py` — the executive/architect/security/developer personas and how much detail each sees",
+    "Intent classification and routing in `src/query_engine/intent.py` — query categories (architecture, search, dependency, security, operations) and keyword fallbacks",
+    "Answer synthesis prompt and citation format in `src/query_engine/synthesis.py`, plus AST chunking rules in `src/ingestion/chunker.py` for your languages/schemas (Avro, Protobuf, OpenAPI)",
+    "Per-user daily token budget (`USER_DAILY_TOKEN_LIMIT`, default 100K) and Lambda reserved concurrency (default 50) in `template.yaml`",
+    "GitHub OAuth App + per-repo webhook wiring (Client ID/Secret/Webhook Secret SAM parameters) to your GitHub org"
+  ],
+  "preBuilt": [
+    "MCP server on a Lambda Function URL (IAM-auth, RESPONSE_STREAM) exposing query_code / index_repo / get_status / connect_github tools to Amazon Quick",
+    "Ingestion pipeline: GitHub-API fetcher (no clone, rate-limit aware), tree-sitter AST chunker, Bedrock Titan embedder, FAISS index persisted to S3 with Lambda /tmp caching",
+    "RAG query engine: intent classification, semantic retrieval, Claude synthesis with file:line citations, and role-based response filtering",
+    "GitHub identity layer: OAuth callback Lambda, KMS-encrypted token store, per-user repo access checks, DynamoDB TTL cache",
+    "Auto re-indexing: GitHub webhook Lambda (HMAC-verified) → SQS FIFO + DLQ → incremental indexer Lambda",
+    "Security + observability baked into the SAM template: Bedrock Guardrail, KMS CMK, input/output sanitization, X-Ray tracing, CloudWatch dashboard + alarms, 90-day log retention, token metering"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed Lambdas, the GitHub OAuth App and webhooks, the indexed source code and embeddings, the KMS key, and all AWS infrastructure in your account. You and your engineering team adapt the Guardrail policy, role filters, intent routing, and chunking to your repos and compliance posture. The agent answers questions over code the requesting user can already access via GitHub — it does not modify repositories or take autonomous actions. Deploy scripts and SAM template are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "software",
+    "code-intelligence",
+    "mcp-server",
+    "amazon-quick",
+    "rag",
+    "github",
+    "bedrock",
+    "claude",
+    "faiss",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

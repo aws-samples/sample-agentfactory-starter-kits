@@ -1,0 +1,105 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "automated-docs-generator",
+  "name": "Automated Docs Generator",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "cross-vertical",
+    "label": "Cross-vertical"
+  },
+  "subSegment": "SaaS/ISVs and platform teams that ship a web app and must keep end-user documentation current",
+  "description": "Generates end-user product documentation by driving your own web app with an AI browser agent (Amazon Nova Act), capturing screenshots, drafting a description of each screen with Claude on Bedrock, and assembling everything into a polished HTML user guide via the Claude Code CLI. A React/CloudFront management UI lets a human review, edit descriptions, replace screenshots, and regenerate the guide; EventBridge can re-run on a schedule so the guide tracks UI changes. Human-in-the-loop — nothing publishes without review.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (ECS Fargate + Nova Act + Bedrock + Lambda/CloudFront UI)",
+  "deployTime": "5–8 days",
+  "services": [
+    "Bedrock",
+    "Nova Act",
+    "ECS",
+    "Lambda",
+    "API Gateway",
+    "CloudFront",
+    "S3",
+    "DynamoDB",
+    "EventBridge",
+    "ECR",
+    "VPC",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  "outcomes": [
+    "[X%] reduction in time to produce and refresh end-user product documentation by automating screenshot capture and first-draft descriptions",
+    "[N hours/week] saved per technical writer / enablement owner on manual screenshotting and screen-by-screen write-ups",
+    "Docs stay current — scheduled re-runs regenerate the guide as the UI changes, cutting [X%] of stale-screenshot and out-of-date-docs complaints",
+    "Human-in-the-loop quality — every screen ships with an AI-drafted description a reviewer edits before publish, with a full audit trail of runs and sections"
+  ],
+  "roi": {
+    "savings": "Not yet modeled (illustrative) in technical-writer / enablement time saved per documentation refresh cycle — validate with your own numbers against current hours-per-release",
+    "cost": "~$40–50/month base on a weekly schedule (NAT Gateway ~$32/mo dominates) plus ~$6–14 per run (ECS Fargate screenshot+generate tasks + Bedrock analysis/generation + Nova Act preview pricing)",
+    "multiple": "Not yet modeled — depends on docs volume, release cadence, and current cost per refresh",
+    "assumes": "Illustrative: one or more web apps with UIs that change every release; docs refreshed manually today by a writer or engineer at a loaded hourly rate. Nova Act is in preview — pricing is variable; confirm in your account. Validate all numbers per deployment."
+  },
+  "idealCustomer": {
+    "size": "SaaS/ISVs, internal platform/tooling teams, or any org that ships a web application and owes end-user, admin, or onboarding documentation",
+    "volume": "One or more web apps with frequently-changing UIs; documentation refreshed monthly/quarterly (or perpetually behind) today",
+    "team": "1–3 technical writers / product-enablement / sales-enablement owners — or an eng/PM team carrying docs as a side task with no dedicated writer",
+    "triggers": [
+      "Product UI changes faster than the team can re-screenshot and rewrite the guide",
+      "Screenshots in the published docs are perpetually stale and show an old version of the UI",
+      "No dedicated technical writer — documentation falls on engineers or PMs between releases",
+      "Onboarding / enablement content takes weeks to produce for each release",
+      "You want self-service docs but can't justify standing up a full docs team"
+    ],
+    "disqualifiers": [
+      "App has no stable scripted login, or requires hardware-token / push MFA the browser agent can't complete",
+      "Documentation must be hand-authored under compliance/legal sign-off with no tolerance for automated drafting",
+      "Target is a single static page or has no real UI surface to capture",
+      "Highly dynamic canvas / WebGL / heavily-animated UI that browser automation can't reliably navigate",
+      "Hard requirement that no automated browser session ever touches a production environment or real data"
+    ]
+  },
+  "customerCustomizes": [
+    "Per-app workflow steps in `screenshot-job/workflows.py` — rewrite every `step_*` function to walk the target app's pages and features",
+    "Target app URL, default credentials, and Nova Act `workflow_definition_name` in `screenshot-job/run.py` (`APP_URL`, `DEFAULT_USERNAME`/`DEFAULT_PASSWORD`)",
+    "Screenshot-analysis prompt context (`PRODUCT_CONTEXT` in `screenshot-job/helpers.py`) so descriptions use the app's terminology",
+    "Deep feature walkthrough in `generate-job/feature_context.txt` — the primary source of truth that drives guide quality",
+    "Guide look-and-feel in `generate-job/template.html` and tone/grouping/structure in the `generate-job/generate.py` prompts",
+    "CDK stack, bucket, and table names plus the EventBridge schedule (or remove it) in `infra/lib/stack.ts`"
+  ],
+  "preBuilt": [
+    "CDK stack provisioning S3, DynamoDB (runs + sections), an ECS Fargate cluster with screenshot + generate task definitions, the Lambda API, API Gateway, CloudFront, EventBridge, and VPC/NAT",
+    "Screenshot job container (Amazon Nova Act + headless Chromium) with reusable `helpers.py`: `safe_act`, `safe_capture`, `ensure_on_app`, `check_timeout`, `analyze_screenshot`",
+    "Generate job container that runs the Claude Code CLI on Bedrock to assemble an HTML guide from a template + feature context, with a fresh-build and a revise-with-feedback prompt path",
+    "Single Lambda API: runs/sections CRUD, presigned S3 upload URLs, ECS `RunTask` triggers for both jobs, and presigned guide URLs",
+    "React + Vite management UI: runs list with live status, section review/edit, screenshot replace, and Generate / Regenerate-with-feedback",
+    "One-command `deploy.sh`: build Lambda → CDK deploy (builds Docker images) → build frontend with API URL → sync to S3 → invalidate CloudFront",
+    "Implementation guide with a full customization checklist, per-service cost model, and troubleshooting runbook"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and reference implementation, not a managed service. You deploy it into your own AWS account and own the stack, the workflow definitions, the credentials the agent uses to log into your app, and the published guide. The browser agent navigates your own application with credentials they supply and is scripted to avoid destructive actions; AI-drafted descriptions are reviewed by a human before publish. Nova Act access (preview) and Bedrock model access must be requested in your account. AWS does not commit to ongoing maintenance.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "documentation",
+    "screenshots",
+    "browser-automation",
+    "nova-act",
+    "ecs-fargate",
+    "bedrock",
+    "claude-code",
+    "cross-vertical",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-30",
+    "lastUpdated": "2026-06-30"
+  }
+}

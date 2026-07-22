@@ -1,0 +1,321 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/agentfactory/agentfactory-starter-kits/schemas/kit.schema.json",
+  "title": "AgentFactory Starter Kit Manifest",
+  "description": "Manifest schema for an AgentFactory starter kit. Validates every kit.json in this repository.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "version",
+    "status",
+    "vertical",
+    "description",
+    "buildLevel",
+    "buildLevelLabel",
+    "deployTime",
+    "services",
+    "outcomes",
+    "roi",
+    "idealCustomer",
+    "customerCustomizes",
+    "preBuilt",
+    "sharedResponsibility",
+    "artifacts",
+    "metadata"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional reference to this schema for editor tooling."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "description": "Lowercase kebab-case identifier; must match the kit's directory name."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Human-readable kit name."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?$",
+      "description": "Semantic-ish version of the kit (e.g. 1.0 or 1.2.3)."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "in-build",
+        "review",
+        "published",
+        "deprecated"
+      ],
+      "description": "Lifecycle status. 'published' means the spec has been validated by a finished build."
+    },
+    "vertical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": [
+            "software",
+            "finserv",
+            "healthcare",
+            "media-entertainment",
+            "retail-consumer",
+            "manufacturing",
+            "professional-services",
+            "energy",
+            "telecom",
+            "travel-hospitality",
+            "other",
+            "cross-vertical"
+          ],
+          "description": "Top-level industry vertical. Group verticals (with the fine-grained industries that roll up to each) are defined in schemas/verticals.json — classify an incoming industry into its group and put the specific industry in subSegment/tags. 'cross-vertical' = applies across all industries."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable vertical label."
+        }
+      }
+    },
+    "subSegment": {
+      "type": "string",
+      "description": "Sub-segment within the vertical (e.g. 'mid-market SaaS', 'community health systems')."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 30,
+      "description": "One-paragraph description of what the kit does and detail page."
+    },
+    "buildLevel": {
+      "type": "string",
+      "enum": [
+        "managed-harness",
+        "managed-agents-openai",
+        "custom-iac"
+      ],
+      "description": "Which AWS primitive this kit uses. Drives which infrastructure files exist on disk."
+    },
+    "buildLevelLabel": {
+      "type": "string",
+      "description": "Human-readable build-level label."
+    },
+    "deployTime": {
+      "type": "string",
+      "description": "Rough time from starting the build to a running agent in your account (e.g. '3–5 days')."
+    },
+    "services": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "AWS services used by the kit. Surfaced as tags on the card."
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "id"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "bedrock",
+            "openai",
+            "gemini"
+          ],
+          "description": "Model provider. 'bedrock' covers Anthropic, Amazon, Meta, Mistral models served via Bedrock."
+        },
+        "id": {
+          "type": "string",
+          "description": "Model identifier (e.g. 'anthropic.claude-3-5-sonnet-20241022-v2:0')."
+        }
+      }
+    },
+    "outcomes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "Outcomes the kit delivers. Lead with metrics."
+    },
+    "roi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "savings",
+        "cost",
+        "multiple"
+      ],
+      "properties": {
+        "savings": {
+          "type": "string",
+          "description": "Annual savings figure (e.g. '$479K/year')."
+        },
+        "cost": {
+          "type": "string",
+          "description": "Annual AWS cost figure (e.g. '$10K/year')."
+        },
+        "multiple": {
+          "type": "string",
+          "description": "ROI multiple shown on the card (e.g. '50–90x')."
+        },
+        "assumes": {
+          "type": "string",
+          "description": "One-line statement of the assumptions behind the numbers."
+        }
+      }
+    },
+    "idealCustomer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size",
+        "triggers"
+      ],
+      "properties": {
+        "size": {
+          "type": "string",
+          "description": "Organization size or revenue band."
+        },
+        "volume": {
+          "type": "string",
+          "description": "Workload volume (e.g. tickets/day)."
+        },
+        "team": {
+          "type": "string",
+          "description": "Team size and role profile."
+        },
+        "triggers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Signals or pain points that indicate this kit is a good fit."
+        },
+        "disqualifiers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Conditions that mean the kit is not a fit."
+        }
+      }
+    },
+    "customerCustomizes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "What you customize after deployment. Half of the shared-responsibility split."
+    },
+    "preBuilt": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "What ships pre-built in the kit. Half of the shared-responsibility split."
+    },
+    "sharedResponsibility": {
+      "type": "string",
+      "minLength": 30,
+      "description": "One-paragraph shared-responsibility statement. Always shown to the reader."
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readme",
+        "architecture",
+        "businessCase"
+      ],
+      "properties": {
+        "readme": {
+          "type": "string",
+          "description": "Path to README.md (relative to kit root)."
+        },
+        "architecture": {
+          "type": "string",
+          "description": "Path to architecture doc."
+        },
+        "businessCase": {
+          "type": "string",
+          "description": "Path to ROI/business-case doc."
+        },
+        "agentsMd": {
+          "type": "string",
+          "description": "Path to AGENTS.md (coding-agent contract). Convention: at kit root alongside README.md."
+        },
+        "buildSpec": {
+          "type": "string",
+          "description": "Path to build-spec/ directory containing requirements.md, architecture-decisions.md, deployment-spec.md, acceptance-tests.md."
+        },
+        "deployScript": {
+          "type": "string",
+          "description": "Path to deploy script (legacy/imported kits only — new kits don't generate this)."
+        },
+        "iacTemplate": {
+          "type": "string",
+          "description": "Path to IaC template (legacy/imported custom-iac kits only)."
+        },
+        "harnessConfig": {
+          "type": "string",
+          "description": "Path to harness.json (legacy/imported managed-harness kits only)."
+        },
+        "agentConfig": {
+          "type": "string",
+          "description": "Path to agent-config.json (legacy/imported managed-agents-openai kits only)."
+        },
+        "repo": {
+          "type": "string",
+          "format": "uri",
+          "description": "External repository URL."
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Free-form tags for search."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "createdAt",
+        "lastUpdated"
+      ],
+      "properties": {
+        "createdAt": {
+          "type": "string",
+          "format": "date",
+          "description": "ISO date the kit was first created."
+        },
+        "lastUpdated": {
+          "type": "string",
+          "format": "date",
+          "description": "ISO date of the last update to this manifest."
+        }
+      }
+    }
+  }
+}

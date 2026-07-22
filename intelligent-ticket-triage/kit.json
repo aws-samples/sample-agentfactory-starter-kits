@@ -1,0 +1,91 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "intelligent-ticket-triage",
+  "name": "Intelligent Ticket Triage",
+  "version": "1.0",
+  "status": "published",
+  "vertical": {
+    "id": "software",
+    "label": "Software & Internet"
+  },
+  "subSegment": "mid-market SaaS",
+  "description": "Reads incoming support tickets, classifies by category/priority/complexity, routes to the right team, and auto-resolves common issues with KB-grounded responses — all behind Bedrock Guardrails.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (Bedrock Agents + KB + Guardrails)",
+  "deployTime": "3–5 days",
+  "services": [
+    "Bedrock Agents",
+    "Knowledge Bases",
+    "Guardrails",
+    "Lambda",
+    "OpenSearch Serverless",
+    "S3",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  },
+  "outcomes": [
+    "60–70% reduction in time-to-first-response",
+    "80%+ classification accuracy",
+    "25–40% of tickets auto-resolved without human intervention",
+    "Engineers freed for higher-value work"
+  ],
+  "roi": {
+    "savings": "$479K/year",
+    "cost": "$10K/year",
+    "multiple": "50–90x",
+    "assumes": "150 tickets/day, 5 support engineers at $150K fully loaded"
+  },
+  "idealCustomer": {
+    "size": "$10M–$200M revenue, mid-market SaaS",
+    "volume": "50–500+ support tickets/day",
+    "team": "3–10+ support engineers on manual triage",
+    "triggers": [
+      "Slow time-to-first-response",
+      "20–30% misroute rate",
+      "Engineer burnout on repetitive triage"
+    ],
+    "disqualifiers": [
+      "<20 tickets/day",
+      "No existing ticket system",
+      "Regulated with no cloud-approved data path"
+    ]
+  },
+  "customerCustomizes": [
+    "Knowledge Base content (your tickets + docs)",
+    "Guardrail rules (PII patterns, topic boundaries)",
+    "Routing logic per category/priority",
+    "Auto-resolution confidence threshold",
+    "Ticket source integration"
+  ],
+  "preBuilt": [
+    "Bedrock Agent orchestration (classify → route or resolve)",
+    "Knowledge Base + Titan Embeddings + OpenSearch Serverless",
+    "Guardrails (PII, topics, grounding, content filters)",
+    "Lambda action groups for classify/route/resolve",
+    "CloudWatch dashboard",
+    "One-command CloudFormation deploy"
+  ],
+  "sharedResponsibility": "Accelerator, not a managed service. You own the deployed infrastructure and data; scripts are as-is. Partners can offer managed support.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "deployScript": "infrastructure/deploy.sh",
+    "iacTemplate": "infrastructure/template.yaml"
+  },
+  "tags": [
+    "support",
+    "triage",
+    "rag",
+    "auto-resolve",
+    "guardrails"
+  ],
+  "metadata": {
+    "createdAt": "2026-05-15",
+    "lastUpdated": "2026-06-03"
+  }
+}

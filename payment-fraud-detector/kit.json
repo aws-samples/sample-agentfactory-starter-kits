@@ -1,0 +1,100 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "payment-fraud-detector",
+  "name": "Payment Fraud Detector",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "finserv",
+    "label": "Financial Services"
+  },
+  "subSegment": "mid-market banks, payment processors, healthcare claims teams",
+  "description": "A working agent that combines a deterministic rules engine with a Bedrock-powered LLM analyst layer to surface fraudulent payment patterns. The reference demo is a pharmacy payment fraud detector, but the same architecture drops into FSI transaction monitoring, AML triage, healthcare claims FWA, or any payment integrity use case with only the rules and data schemas changing.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (Bedrock Agent + MCP Server + Streamlit UI)",
+  "deployTime": "5–7 days",
+  "services": [
+    "Bedrock",
+    "Bedrock Agents",
+    "ECS",
+    "Application Load Balancer",
+    "VPC",
+    "S3",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-3-sonnet-20240229-v1:0"
+  },
+  "outcomes": [
+    "30–50% reduction in analyst triage time per alert by layering LLM narrative analysis on top of deterministic rule fires",
+    "8–12 hours/week saved per fraud analyst, who today spend ~60% of their time clearing false positives",
+    "Auditable analyst-grade rationale for every flagged transaction (not just a score)",
+    "Faster triage of false-positive rule fires (industry false-positive rates run 85–95%) through LLM contextualization"
+  ],
+  "roi": {
+    "savings": "$1.5M–3.5M/year (illustrative) in analyst time from faster alert triage and false-positive contextualization",
+    "cost": "$60K–150K/year — Bedrock (Claude Sonnet) invocations + ECS Fargate runtime + Application Load Balancer + NAT",
+    "multiple": "~15–40x",
+    "assumes": "Illustrative: mid-market payments/AML team handling ~1,000 alerts/day at an 85–95% false-positive rate, analysts at ~$90/hr loaded spending 20–30 min/alert today. Validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Mid-market banks, payment processors, payment integrity teams in healthcare / pharmacy / insurance",
+    "volume": "100K+ transactions/month; existing rules engine producing >5% false positive rate; fraud-ops team of 3–20 analysts",
+    "team": "Fraud operations or payment integrity team supported by a small data/eng group",
+    "triggers": [
+      "Existing rules engine generates too many false positives, drowning analysts in noise",
+      "You want explainable AI on top of your existing rules — not a black-box ML model",
+      "You already have a containerized infra stack (ECS / EKS) and want the agent to live next to it",
+      "Data exists in S3 but isn't yet usable for ad-hoc analyst questions",
+      "Compliance team asking 'why did the model flag this?' and not getting good answers"
+    ],
+    "disqualifiers": [
+      "You expect a fully autonomous decision system (this is decision-support, not auto-block)",
+      "No existing rules infrastructure to anchor the deterministic layer (kit assumes hybrid architecture)",
+      "Sub-1000 transactions/month — overhead won't pay back",
+      "Strict requirement for on-premises deployment (kit is cloud-native)"
+    ]
+  },
+  "customerCustomizes": [
+    "Rules engine logic in `mcp-server/src/rules/` — vertical-specific patterns (FinServ AML, healthcare FWA, insurance, etc.)",
+    "Data schemas in `data/` — transaction, sender, receiver shapes per your payment system",
+    "Bedrock Agent action group definitions in `bedrock-agent/bedrock_config.json`",
+    "Streamlit UI components in `streamlit-app/components/` — branding, dashboard layout, alert presentation",
+    "MCP API schema in `infrastructure/cloudformation/mcp-api-schema.json` to expose the right tool signatures",
+    "Guardrails / denial topics specific to your regulatory environment"
+  ],
+  "preBuilt": [
+    "Bedrock Agent + 3 action groups wired to MCP server tools",
+    "FastAPI-based MCP server (containerized on ECS Fargate)",
+    "ALB + VPC + ECS infrastructure as CloudFormation",
+    "Streamlit analyst UI with dashboard, alerts, raw-data, senders, coordinators tabs",
+    "Test data generators for generic + pharmacy payment scenarios",
+    "End-to-end deployment scripts in `infrastructure/cloudformation/deploy.sh`",
+    "Concurrent request + autoscaling test harness for the MCP server"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference, not a managed service. You own the deployed agent, the rules engine, the data, the AWS infrastructure, and the analyst workflow. Scripts are provided as-is — you and your engineering team customize the rules and schemas to your payment domain. Partners can offer managed support engagements if needed.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "finserv",
+    "payments",
+    "fraud",
+    "aml",
+    "claims-fwa",
+    "rules-engine",
+    "mcp-server",
+    "streamlit",
+    "ecs",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-05-29",
+    "lastUpdated": "2026-06-03"
+  }
+}

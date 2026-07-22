@@ -1,0 +1,92 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "clinical-trial-site-lookup",
+  "name": "Clinical Trial Site Lookup",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "healthcare",
+    "label": "Healthcare & Life Sciences"
+  },
+  "subSegment": "pharma sponsors + CROs",
+  "description": "Helps clinical trial site selectors find active research sites by therapeutic area, phase, and geography. Searches ClinicalTrials.gov + your internal CRO database, ranks by enrollment performance and capacity, returns enriched output with PI, site status, and recent enrollment trend. Read-only — no PHI write paths.",
+  "buildLevel": "managed-harness",
+  "buildLevelLabel": "AgentCore Managed Harness",
+  "deployTime": "5–7 days",
+  "services": [
+    "Bedrock",
+    "AgentCore Managed Harness",
+    "AgentCore Gateway",
+    "Knowledge Bases",
+    "Guardrails",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  },
+  "outcomes": [
+    "30–50% reduction in site-identification cycle time per trial by automating ClinicalTrials.gov + internal CRO database queries",
+    "5–10 hours/week saved per site selector on manual database lookups",
+    "Auditable answer trail with cited sources for every site recommendation",
+    "Faster trial start-up — each day of earlier start-up avoids ~$40K/day in direct phase-3 trial cost (and far more in at-risk peak revenue)"
+  ],
+  "roi": {
+    "savings": "$150K–400K/year (illustrative) in site-selector time — excludes the much larger avoided trial-delay cost (~$40K/day of earlier start-up)",
+    "cost": "$15K–40K/year — Bedrock (Claude Sonnet) + Knowledge Base (OpenSearch Serverless ~$350/mo floor) + AgentCore Gateway + CloudWatch",
+    "multiple": "~5–20x on selector time alone; materially higher once trial-delay avoidance is counted",
+    "assumes": "Illustrative: mid-size CRO/sponsor running 30+ active trials; site selectors at ~$110/hr loaded; phase-3 delay costs ~$40K/day in direct trial spend (NIH). Validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Mid-market pharma sponsors, CROs (Contract Research Organizations), academic medical centers running multi-site trials",
+    "volume": "30+ active trials at any time; site-selection touches 50–500 candidate sites per trial",
+    "team": "1–5 site selectors per therapeutic area; supported by feasibility analysts",
+    "triggers": [
+      "Trials repeatedly missing first-patient-in milestones due to site activation delays",
+      "Site selectors spending hours per day in ClinicalTrials.gov + internal CRO portals",
+      "No structured way to compare candidate sites by recent enrollment performance",
+      "Leadership asking 'why is site identification so slow?'"
+    ],
+    "disqualifiers": [
+      "Single-site or investigator-initiated trials (no selection problem to solve)",
+      "You have no internal CRO database to enrich the public data with",
+      "Heavily regulated trials where site selection is contractually fixed upstream"
+    ]
+  },
+  "customerCustomizes": [
+    "Internal CRO database connection (BigQuery / Postgres / Snowflake / proprietary CTMS)",
+    "Therapeutic-area taxonomy and synonyms specific to the sponsor",
+    "Site-ranking weights (enrollment speed vs. capacity vs. PI track record)",
+    "Site shortlists (preferred / blocked) per program",
+    "Geographic constraints and time-zone preferences"
+  ],
+  "preBuilt": [
+    "AgentCore Managed Harness with the trial-site-lookup system prompt",
+    "ClinicalTrials.gov MCP server (read-only public API)",
+    "Knowledge Base structure for therapeutic-area docs + site profiles",
+    "Guardrails template (refuse PHI inputs, no diagnostic claims, citation requirement)",
+    "CloudWatch dashboard (queries/day, citation rate, source mix, latency)",
+    "AGENTS.md + build-spec/ contract for a coding agent to implement"
+  ],
+  "sharedResponsibility": "Read-only kit. You own deployed harness config, KB content, and the connection to your CRO database. AWS does not handle PHI in this kit; the agent refuses inputs containing PHI patterns and the data sources are non-PHI by design.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "healthcare",
+    "clinical-trials",
+    "pharma",
+    "cro",
+    "search",
+    "rag",
+    "agentcore-harness"
+  ],
+  "metadata": {
+    "createdAt": "2026-05-27",
+    "lastUpdated": "2026-06-03"
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "agentic-insurance-advisor",
+  "name": "Agentic Insurance Advisor",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "finserv",
+    "label": "Financial Services"
+  },
+  "subSegment": "life & annuity carriers, broker-dealers, IMOs/MGAs, InsurTech advisory platforms",
+  "description": "An advisory agent for insurance producers that turns a client profile into a complete, client-ready recommendation package. A Bedrock supervisor agent orchestrates three specialists — a product-retrieval agent that does RAG over carrier product documents, a suitability agent that scores each product against eight FINRA/SEC-style rules loaded from a YAML config, and a letter agent that drafts a compliant recommendation letter with required disclosures. The same supervisor-plus-specialists pattern applies to any regulated advisory workflow where a recommendation must be researched, rule-checked, and documented with an audit trail.",
+  "buildLevel": "custom-iac",
+  "buildLevelLabel": "Custom IaC (Bedrock Multi-Agent Collaboration + Knowledge Base + Lambda + React UI)",
+  "deployTime": "5–8 days",
+  "services": [
+    "Bedrock",
+    "Bedrock Agents",
+    "Bedrock Knowledge Bases",
+    "OpenSearch Serverless",
+    "Lambda",
+    "API Gateway",
+    "DynamoDB",
+    "S3",
+    "CloudFront",
+    "IAM",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  "outcomes": [
+    "~9 hours/week returned to each producer (illustrative) by collapsing manual product cross-referencing, suitability reasoning, and letter drafting — a ~45-min manual task — into a single sub-2-minute workflow",
+    "~25% more clients served per advisor by removing the manual research bottleneck — advisors today spend only ~53% of their time client-facing and ~22% on admin/compliance/paperwork (Cerulli/Invesco)",
+    "Consistent, auditable suitability reasoning — every product scored against the same eight documented rules (risk tolerance, affordability, age appropriateness, coverage gaps, concentration, replacement, liquidity, dependent need) with the rule ID cited in every verdict",
+    "Compliant recommendation letters generated with the required disclosure language and per-product justification by construction, eliminating the disclosure gaps and inconsistent reasoning common in hand-written letters"
+  ],
+  "roi": {
+    "savings": "~$0.69M/year (illustrative) — 40 producers × 4 advisories/day × 240 days × ~27 min saved each × $40/hr loaded labor; capacity/time value only, compliance loss-avoidance is additional upside not counted",
+    "cost": "~$18K/year — OpenSearch Serverless HA OCU floor (~$8.4K, dominant fixed cost) + Claude Sonnet 4.5 tokens (~$9.2K at ~$0.24/advisory × 38,400) + KB retrieve/storage + Lambda/API GW/DynamoDB/CloudFront (~$0.4K)",
+    "multiple": "~30–40x",
+    "assumes": "Loaded rate $40/hr = BLS median $60,370 for insurance sales agents (SOC 41-3021, May 2024) × ~1.4 loaded; ~22% of advisor time on admin/paperwork per Cerulli/Invesco; ~45-min manual advisory and 60% time reduction are illustrative internal estimates; cost computed from AWS Bedrock + OpenSearch Serverless pricing. Research-backed illustrative — validate with your own numbers. OpenSearch Serverless OCU floor dominates cost at low volume."
+  },
+  "idealCustomer": {
+    "size": "Life & annuity carriers, broker-dealers, IMOs/MGAs, and InsurTech advisory platforms with a producer or advisor network and a defined product catalog",
+    "volume": "Producers running enough advisories that manual product research and letter drafting is a real time sink; a carrier product catalog that can be loaded into a knowledge base",
+    "team": "An advisory/distribution team plus a compliance function that owns suitability standards, supported by a small platform/data engineering group",
+    "triggers": [
+      "Producers spend significant time per client manually cross-referencing product brochures, rate sheets, and eligibility before they can recommend anything",
+      "Compliance wants consistent, documented suitability reasoning and complete disclosures on every recommendation — not advisor-by-advisor variation",
+      "Recommendation letters are hand-written and inconsistent, and audit prep is painful because the reasoning behind a recommendation isn't captured",
+      "The carrier or distributor has a product catalog (PDF brochures, policy summaries, rate sheets) that no one can query quickly across",
+      "Leadership wants to grow advisory capacity without proportionally growing headcount"
+    ],
+    "disqualifiers": [
+      "You expect the agent to make and bind the recommendation autonomously (this is producer decision-support with a human in the loop, not auto-advice)",
+      "No structured client profile data (age, income, dependents, risk tolerance, existing coverage) to drive retrieval and suitability scoring",
+      "No usable product catalog to index into a knowledge base, and no appetite to create one",
+      "Strict on-premises-only requirement (kit is cloud-native on Bedrock, OpenSearch Serverless, and Lambda)"
+    ]
+  },
+  "customerCustomizes": [
+    "Carrier product catalog ingested into the knowledge base — replace the sample documents in `data/carrier-products/` with your real brochures, policy summaries, and rate sheets, then re-sync the Bedrock Knowledge Base",
+    "Suitability rules in `data/rules/suitability-rules.yaml` — the eight SUIT-01…SUIT-08 rules, your thresholds (e.g. the 10%-of-income affordability ceiling), and verdict logic, edited to your compliance standard and lines of business",
+    "Agent instructions in `agents/{supervisor,product-retrieval,suitability,recommendation}/agent-config.json` — the system prompts that define each agent's behavior and the supervisor's orchestration order",
+    "Recommendation-letter structure and the required disclosure block in the recommendation agent's instruction (`agents/recommendation/agent-config.json`) — wording reviewed by your compliance team",
+    "Client profile schema and seed data in `data/client-profiles/clients.json` and the DynamoDB `clients` table, mapped to your CRM/policy-admin data",
+    "Per-agent model tier in the provisioning scripts (`agents/setup-agents.sh`, `agents/speed-up-models.sh`) — Sonnet 4.5 for reasoning vs. Nova 2 Lite / Nova Pro for speed, traded off against your latency and cost targets"
+  ],
+  "preBuilt": [
+    "Four-agent Bedrock collaboration topology (supervisor SUPERVISOR_ROUTER + product-retrieval + suitability + recommendation) with provisioning scripts in `agents/` that create the agents, attach the action group and knowledge base, and wire the collaborators",
+    "Suitability action-group Lambda (`agents/suitability/action-group/handler.py`) that loads the YAML rules from S3 and writes job progress to DynamoDB",
+    "Eight FINRA/SEC-style suitability rules pre-authored in `data/rules/suitability-rules.yaml` with criteria and verdict logic",
+    "CloudFormation template (`infrastructure/template.yaml`) provisioning S3 buckets, DynamoDB tables, API Gateway HTTP API, CloudFront + OAC, and least-privilege IAM roles for the agents, KB, and Lambdas",
+    "Async REST API (5 Lambda handlers in `api/src/handlers/`) that creates an advisory job, invokes the supervisor agent, and exposes job status and results",
+    "React + Vite advisor UI (`frontend/`) with client selector, advisory-type picker, progress tracker, and a tabbed results view with letter export",
+    "Six diverse sample client profiles and five sample carrier product documents for an end-to-end demo out of the box"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference implementation, not a managed service. You own the deployed agents, the product knowledge base, the suitability rules, the client and advisory data, and the AWS infrastructure in your account. You and your engineering team adapt the agent prompts, the suitability YAML, the disclosure language, and the product catalog to your lines of business and compliance standard. The output is a recommendation package for a licensed producer to review, edit, and own — the human producer makes and is accountable for the recommendation. Deploy scripts are provided as-is.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "finserv",
+    "insurance",
+    "advisory",
+    "multi-agent",
+    "suitability",
+    "rag",
+    "compliance",
+    "bedrock",
+    "claude",
+    "custom-iac"
+  ],
+  "metadata": {
+    "createdAt": "2026-06-19",
+    "lastUpdated": "2026-06-19"
+  }
+}

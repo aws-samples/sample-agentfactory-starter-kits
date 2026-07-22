@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentFactory — Vertical AI Agent Starter Kits</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" integrity="sha384-/o6I2CkkWC//PSjvWC/eYN7l3xM3tJm8ZzVkCOfp//W05QcE3mlGskpoHB6XqI+B" crossorigin="anonymous">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a2e; line-height: 1.6; }
+
+/* Hero */
+.hero {
+  background: linear-gradient(135deg, #232f3e 0%, #1a2332 60%, #0d1b2a 100%);
+  padding: 64px 48px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 40%;
+  background: linear-gradient(135deg, transparent 30%, rgba(255,153,0,0.05) 100%);
+  pointer-events: none;
+}
+.hero-content { position: relative; z-index: 1; max-width: 900px; }
+.hero h1 { font-size: 36px; font-weight: 700; color: #ffffff; margin-bottom: 12px; }
+.hero h1 span { color: #ff9900; }
+.hero p { font-size: 18px; color: #adb5bd; max-width: 640px; line-height: 1.7; }
+.hero-badge { display: inline-block; background: rgba(255,153,0,0.15); color: #ff9900; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; margin-bottom: 16px; letter-spacing: 0.03em; }
+
+/* Section base */
+.section { padding: 48px; max-width: 1000px; margin: 0 auto; }
+.section-title { font-size: 24px; font-weight: 700; color: #232f3e; margin-bottom: 8px; }
+.section-subtitle { font-size: 15px; color: #6c757d; margin-bottom: 32px; }
+
+/* Callout */
+.callout { background: #fff8e1; border-left: 4px solid #ff9900; border-radius: 8px; padding: 24px 28px; margin: 0 auto; max-width: 1000px; }
+.callout h3 { font-size: 17px; font-weight: 700; color: #232f3e; margin-bottom: 10px; }
+.callout p { font-size: 14px; color: #5f5f5f; margin-bottom: 10px; }
+.callout p:last-child { margin-bottom: 0; }
+.callout code { background: rgba(0,0,0,0.06); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+
+/* Problem Statement */
+.problem { background: #f8f9fa; padding: 48px; }
+.problem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1000px; margin: 0 auto; }
+.problem-card { background: white; border-radius: 12px; padding: 24px; border: 1px solid #e9ecef; }
+.problem-card .num { font-size: 32px; font-weight: 800; color: #ff9900; margin-bottom: 8px; }
+.problem-card h3 { font-size: 15px; font-weight: 600; color: #232f3e; margin-bottom: 8px; }
+.problem-card p { font-size: 13px; color: #6c757d; line-height: 1.6; }
+
+/* Steps */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.step-card { background: white; border: 2px solid #e9ecef; border-radius: 12px; padding: 28px; }
+.step-card .icon { font-size: 32px; margin-bottom: 16px; color: #232f3e; }
+.step-card .step-num { font-size: 11px; font-weight: 700; color: #ff9900; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.step-card h3 { font-size: 16px; font-weight: 600; color: #232f3e; margin-bottom: 8px; }
+.step-card p { font-size: 13px; color: #6c757d; line-height: 1.5; }
+.step-card code { background: #f1f3f5; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+/* Structure list */
+.structure { background: #f8f9fa; padding: 48px; }
+.structure-inner { max-width: 1000px; margin: 0 auto; }
+.file-table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; border: 1px solid #e9ecef; }
+.file-table td { padding: 12px 18px; font-size: 13.5px; border-bottom: 1px solid #f1f3f5; vertical-align: top; }
+.file-table tr:last-child td { border-bottom: none; }
+.file-table td:first-child { font-family: 'SF Mono', Monaco, monospace; font-size: 12.5px; color: #232f3e; font-weight: 600; white-space: nowrap; width: 210px; }
+.file-table td:last-child { color: #6c757d; }
+
+/* Stats */
+.stats { background: #232f3e; padding: 48px; }
+.stats .section-title { color: #ffffff; }
+.stats .section-subtitle { color: #adb5bd; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1000px; margin: 0 auto; }
+.stat-card { text-align: center; padding: 20px 12px; }
+.stat-card .value { font-size: 36px; font-weight: 800; color: #ff9900; font-family: 'SF Mono', Monaco, monospace; }
+.stat-card .label { font-size: 12px; color: #adb5bd; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+
+/* Footer */
+.footer { padding: 40px 48px; max-width: 1000px; margin: 0 auto; border-top: 1px solid #e9ecef; }
+.footer h3 { font-size: 15px; font-weight: 700; color: #232f3e; margin-bottom: 10px; }
+.footer p { font-size: 13px; color: #6c757d; margin-bottom: 8px; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .problem-grid, .steps { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .hero { padding: 40px 24px; }
+  .section, .problem, .structure, .footer { padding: 32px 24px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">18 BLUEPRINTS · AMAZON BEDROCK</div>
+    <h1><span>AgentFactory</span> — Vertical AI Agent Starter Kits</h1>
+    <p>Blueprints for building production-oriented AI agents on AWS. Each kit gives you the reference architecture, the build contract, the acceptance tests, and the business case for a specific industry problem — so you can go from pattern to deployed agent in days, not months.</p>
+  </div>
+</div>
+
+<!-- Honest framing -->
+<div class="section">
+  <div class="callout">
+    <h3>Read this first: these kits are specs, not code drops</h3>
+    <p>Most kits here <strong>do not contain the agent's source code.</strong> A kit is the design and the contract — it tells you and your coding agent exactly what to build, why each architectural choice was made, and how to verify the result. You implement it in your own AWS account.</p>
+    <p>That's deliberate. These patterns get adapted to your data, schemas, compliance posture, and integrations anyway, so the durable value is in the architecture and the decision rationale rather than a fork of someone else's repo. <code>AGENTS.md</code> and <code>build-spec/</code> are written to be handed straight to a coding agent.</p>
+    <p>Two exceptions if you want running code fastest: <code>intelligent-ticket-triage</code> ships a working CloudFormation stack and Lambda tools, and <code>manufacturing-operations-hub</code> points at an MIT-licensed AWS sample you can clone.</p>
+  </div>
+</div>
+
+<!-- What We're Solving For -->
+<div class="problem">
+  <div style="max-width: 1000px; margin: 0 auto;">
+    <div class="section-title">What we're solving for</div>
+    <div class="section-subtitle">Teams adopting agents hit three sequential blockers. A kit addresses all three.</div>
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="num">1</div>
+        <h3>"What should we build?"</h3>
+        <p>You know AI agents matter but picking which workflow to automate is the hard part. A generic capabilities overview doesn't help; vertical-specific patterns with a stated ideal customer do.</p>
+      </div>
+      <div class="problem-card">
+        <div class="num">2</div>
+        <h3>"How do we build it?"</h3>
+        <p>Your developers can write application code but agent orchestration, retrieval configuration, and guardrail setup are unfamiliar. The gap between demo and production is where projects die.</p>
+      </div>
+      <div class="problem-card">
+        <div class="num">3</div>
+        <h3>"How do we justify it?"</h3>
+        <p>Leadership wants a business case before funding. Each kit ships an ROI model with explicit assumptions you can re-run with your own numbers.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- How to use a kit -->
+<div class="section">
+  <div class="section-title">How to use a kit</div>
+  <div class="section-subtitle">Clone the repo, pick a kit, hand it to your coding agent.</div>
+  <div class="steps">
+    <div class="step-card">
+      <div class="icon"><i class="fa-solid fa-folder-open"></i></div>
+      <div class="step-num">Step 1</div>
+      <h3>Pick a kit</h3>
+      <p>Browse the kit folders and read <code>README.md</code> and <code>kit.json</code> — the problem it solves, the AWS services, the ideal customer, and the disqualifiers.</p>
+    </div>
+    <div class="step-card">
+      <div class="icon"><i class="fa-solid fa-robot"></i></div>
+      <div class="step-num">Step 2</div>
+      <h3>Hand it to a coding agent</h3>
+      <p>Open the folder in Kiro, Claude Code, Cursor, or Codex and point it at <code>AGENTS.md</code> plus <code>build-spec/</code>. The spec states requirements, architecture decisions, and deployment targets.</p>
+    </div>
+    <div class="step-card">
+      <div class="icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+      <div class="step-num">Step 3</div>
+      <h3>Deploy and verify</h3>
+      <p>Deploy into your own AWS account, then run the kit's acceptance tests to prove the build behaves — including guardrails and human-in-the-loop paths.</p>
+    </div>
+  </div>
+</div>
+
+<!-- What's in a kit -->
+<div class="structure">
+  <div class="structure-inner">
+    <div class="section-title">What's in a kit</div>
+    <div class="section-subtitle">Every kit follows the same structure, so you always know where to look.</div>
+    <table class="file-table">
+      <tr><td>kit.json</td><td>Machine-readable manifest — services, model, outcomes, ROI, ideal customer, disqualifiers</td></tr>
+      <tr><td>README.md</td><td>The problem, the outcomes, what's pre-built vs. what you customize</td></tr>
+      <tr><td>AGENTS.md</td><td>Build contract — hand this to your coding agent first</td></tr>
+      <tr><td>architecture/</td><td>Reference architecture, component breakdown, data flow</td></tr>
+      <tr><td>build-spec/</td><td>requirements · architecture-decisions · deployment-spec · acceptance-tests</td></tr>
+      <tr><td>business-case/</td><td>ROI model with stated assumptions, cost drivers, objection handling</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+  <div style="max-width: 1000px; margin: 0 auto;">
+    <div class="section-title">The catalog</div>
+    <div class="section-subtitle">Spanning financial services, healthcare, manufacturing, retail, software, and cross-vertical patterns.</div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="value">18</div>
+        <div class="label">Starter Kits</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">6</div>
+        <div class="label">Verticals</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">2</div>
+        <div class="label">Build Levels</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">3–9d</div>
+        <div class="label">Typical Build</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer / disclaimers -->
+<div class="footer">
+  <h3>Before you deploy</h3>
+  <p><strong>Implementing a kit creates real, billable AWS resources</strong> — Bedrock invocations, Lambda, storage, vector stores — in your own account. Review the architecture and the AWS Pricing Calculator first, and tear down what you're not using.</p>
+  <p><strong>ROI figures are illustrative models with stated assumptions, not guarantees.</strong> Each kit documents its inputs so you can re-run the math with your own volumes and labor rates.</p>
+  <p><strong>Kits are provided as-is, without warranty.</strong> You own the infrastructure, configuration, and data in your account. A kit is a starting point, not a compliance-certified product — review security, data handling, guardrails, and regulatory requirements for your use case before production. Several kits deliberately keep a human in the loop for consequential decisions; preserve that.</p>
+</div>
+
+</body>
+</html>
