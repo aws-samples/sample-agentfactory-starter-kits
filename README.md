@@ -12,7 +12,7 @@ Concretely, here's what ships in this repo:
 
 | | Kits | What you get |
 |---|---|---|
-| **Spec only** | 16 kits | Architecture + build contract + acceptance tests. You implement it. |
+| **Spec only** | 17 kits | Architecture + build contract + acceptance tests. You implement it. |
 | **Ships working code** | `intelligent-ticket-triage` | CloudFormation template, Lambda action groups, system prompt, one-command deploy. |
 | **Points to public source** | `manufacturing-operations-hub` | Spec plus a clone-and-adapt path to an MIT-licensed AWS sample repo. |
 
@@ -80,6 +80,7 @@ Each kit declares a `buildLevel` in `kit.json` describing how much infrastructur
 | Agentic PXM Platform | Retail & Consumer | Custom IaC (CDK: Step Functions HITL + AgentCore) | Spec |
 | Automated Docs Generator | Cross-vertical | Custom IaC (ECS Fargate + Nova Act + Bedrock) | Spec |
 | BriefMe Sales Brief Generator | Cross-vertical | Custom IaC (AgentCore + Nova Premier Web Grounding) | Spec |
+| Clinical Documentation Agent | Healthcare & Life Sciences | Managed Harness (AgentCore + Amazon Connect Health) | Spec |
 | Clinical Trial Site Lookup | Healthcare & Life Sciences | Managed Harness (AgentCore) | Spec |
 | Code Intelligence Agent | Software & Internet | Custom IaC (SAM: MCP Lambda + Bedrock + Guardrails) | Spec |
 | Field Technician Dispatch Agent | Cross-vertical | Custom Stack (Strands + FastAPI + React) | Spec |
