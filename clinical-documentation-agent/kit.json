@@ -1,0 +1,104 @@
+{
+  "$schema": "../schemas/kit.schema.json",
+  "id": "clinical-documentation-agent",
+  "name": "Clinical Documentation Agent",
+  "version": "0.1.0",
+  "status": "draft",
+  "vertical": {
+    "id": "healthcare",
+    "label": "Healthcare & Life Sciences"
+  },
+  "subSegment": "behavioral-health provider groups, outpatient psychiatry and therapy practices, telehealth BH platforms",
+  "description": "A five-agent pipeline that turns a therapy or psychiatry session transcript into a template-structured clinical note (CBT, Med Management, Crisis, SOAP, DAP), assigns ICD-10 and time-based CPT codes with confidence scores, runs a blocking QA pass (required sections, SI/HI risk screening, CPT-to-duration match, hallucination check, credential scope), and holds everything for clinician sign-off before writing the note and superbill back to the EHR. The spec calls for a deterministic, offline-runnable first build; the production target is Amazon Connect Health ambient documentation plus a Bedrock AgentCore behavioral-health intelligence layer.",
+  "buildLevel": "managed-harness",
+  "buildLevelLabel": "AgentCore Managed Harness + Amazon Connect Health (hybrid target)",
+  "deployTime": "6–8 days",
+  "services": [
+    "Amazon Connect Health",
+    "Bedrock",
+    "Bedrock AgentCore",
+    "AgentCore Memory",
+    "S3",
+    "HealthLake",
+    "CloudWatch"
+  ],
+  "model": {
+    "provider": "bedrock",
+    "id": "anthropic.claude-sonnet-4-5-20250929-v1:0"
+  },
+  "outcomes": [
+    "[X min → Y min] clinician note-review time per session, from a 15–20 minute baseline toward a sub-2-minute target, because the clinician reviews a pre-drafted, pre-coded, QA-passed note instead of writing one",
+    "[X%] of notes blocked before sign-off for a missing SI/HI risk screening — the QA agent fails the note rather than letting a compliance gap reach the chart",
+    "[X%] first-pass coding acceptance by billing, with every ICD-10/CPT code carrying a confidence score and a rationale tied to session duration and credential",
+    "Prescriber-only codes (99213/99214/99215, 90863) cannot be billed under a non-prescriber credential — the credential-scope check fails the note, not the claim"
+  ],
+  "roi": {
+    "savings": "$600K–1.2M/year (illustrative) in clinician documentation time for a 100-provider BH group — see the ROI framework for the derivation",
+    "cost": "$45K–130K/year — Connect Health ambient-documentation sessions + Bedrock (Claude Sonnet 4.5, prompt-cached) + AgentCore runtime/memory + S3 + CloudWatch; scales per session",
+    "multiple": "~8–20x",
+    "assumes": "Illustrative: 100 BH providers, 6 sessions/provider/day, 22 clinic days/month; clinicians at ~$95/hr loaded spending 15–20 min/session on documentation today; the reference design projects ~$0.04/session for the Bedrock layer with caching and tiering (a projection, not a measured result). Validate with your own numbers."
+  },
+  "idealCustomer": {
+    "size": "Behavioral-health provider groups with 25–2,000 clinicians; outpatient psychiatry, therapy, and IOP/PHP programs; BH-focused telehealth platforms",
+    "volume": "500+ sessions/week; mix of psychotherapy (90832/90834/90837), med management (99214), and crisis (90839) encounters; multiple credential types (MD/DO/NP/PMHNP alongside LCSW/LPC/LMFT)",
+    "team": "Clinical operations lead + billing/RCM manager + compliance officer; a small engineering or IT group that owns the EHR integration",
+    "triggers": [
+      "Clinicians spend 15–20 minutes per session on notes and the practice is losing after-hours time ('pajama time') to documentation",
+      "Payer audits or internal compliance reviews have found notes missing a documented SI/HI risk screening",
+      "Billing is seeing CPT time-code denials because the documented session duration does not support the code billed",
+      "Non-prescribers are occasionally billing E&M or pharmacologic-management codes they are not credentialed for",
+      "You already own or control your EHR and can expose a direct write-back API — no HL7/FHIR interface project required",
+      "You want clinician sign-off on every note; you are not looking for autonomous charting"
+    ],
+    "disqualifiers": [
+      "You want notes filed to the chart without clinician review (this kit blocks write-back until a clinician signs)",
+      "Primary need is general-medicine or surgical documentation — the templates, risk checks, and coding rules here are behavioral-health specific",
+      "No path to an EHR write-back API; you expect the agent to type into a vendor UI",
+      "You cannot obtain patient consent for session recording, which Connect Health ambient documentation requires",
+      "Fewer than ~100 sessions/week — the integration effort will not pay back"
+    ]
+  },
+  "customerCustomizes": [
+    "Note templates and required sections — `healthcare_agent/agents/note_agent.py` `TEMPLATE_SECTIONS` (CBT Session, Med Management, Crisis Assessment, Initial Psychiatric Eval, SOAP, DAP) and the session-type → template routing in `context_agent.select_template`",
+    "Coding rules — `healthcare_agent/agents/coding_agent.py`: `cpt_for_duration` time bands (≤37 → 90832, 38–52 → 90834, ≥53 → 90837), `PRESCRIBER_CREDENTIALS`, prescriber-only code set, add-on (90785, 90863) and modifier (95) logic; extend for your payer mix",
+    "QA checks and thresholds — `healthcare_agent/agents/qa_agent.py`: the seven checks, `MH_TEMPLATES`, `CPT_TIME_RULES`, and the `clinical_vocab` allowlist used by the hallucination check",
+    "Inference backend — replace `SimulatedAgentRunner` in `healthcare_agent/agent_runner.py` with a `BedrockAgentRunner` (Strands + Claude Sonnet 4.5) and, optionally, Connect Health ambient documentation for the transcription and base-note stages",
+    "EHR adapter — swap the in-memory `EHRStore` in `healthcare_agent/ehr_store.py` for your EHR API or HealthLake FHIR R4 client; keep `get_patient_context`, `file_note`, `attach_superbill` as the interface",
+    "Clinician review UI — `web/index.html` (vanilla HTML/JS) or re-skin into your EHR front end; it only needs the `/api/sessions` routes"
+  ],
+  "preBuilt": [
+    "Five-stage agent pipeline (context → transcription → note → coding → QA) orchestrated in fixed order by `Orchestrator.run_pipeline`, with a per-stage audit event and a QA gate that blocks write-back on any FAIL",
+    "Deterministic agent handlers behind an `AgentRunner` abstraction so the orchestrator, API, and UI do not change when the backend swaps to Bedrock",
+    "FastAPI service with session create / run / get / signoff / audit routes, a 20,000-character transcript cap (413), and 409/422 guards on sign-off",
+    "Behavioral-health coding rules: ICD-10 F-code carry-forward, time-banded psychotherapy CPT, crisis and E&M codes, telehealth modifier 95, prescriber-credential scope check",
+    "Seven-check QA agent: required sections, SI/HI risk screening, CPT-vs-duration, diagnosis present, hallucination (content-word grounding), credential scope, PHQ-9/GAD-7 measurement referenced",
+    "Clinician review web UI showing note, evidence map (claim → utterance), codes with confidence, QA report, and timestamped audit trail",
+    "29 tests: pipeline end-to-end, coding thresholds, credential blocking, sign-off blocking, determinism, plus Hypothesis property tests on the CPT time bands",
+    "Three synthetic patients and three synthetic transcripts (CBT 53 min, telehealth med-management 25 min with an auth alert, crisis 45 min) — no PHI anywhere in the repo"
+  ],
+  "sharedResponsibility": "This kit is an accelerator and a working reference, not a managed service. You own the deployed pipeline, the note templates, the coding and QA rules, the EHR integration, the AWS infrastructure, and the clinical and billing decisions the agent supports. The prototype ships with synthetic data only; you are responsible for patient consent, your BAA with AWS, and compliance review before any PHI enters the system. Everything is provided as-is — adapt the rules and templates to your payer mix and clinical workflows.",
+  "artifacts": {
+    "readme": "README.md",
+    "architecture": "architecture/architecture.md",
+    "businessCase": "business-case/roi-framework.md",
+    "agentsMd": "AGENTS.md",
+    "buildSpec": "build-spec/"
+  },
+  "tags": [
+    "healthcare",
+    "behavioral-health",
+    "clinical-documentation",
+    "ambient-scribe",
+    "medical-coding",
+    "icd-10",
+    "cpt",
+    "connect-health",
+    "agentcore-harness",
+    "human-in-the-loop",
+    "aidlc"
+  ],
+  "metadata": {
+    "createdAt": "2026-10-13",
+    "lastUpdated": "2026-10-13"
+  }
+}
